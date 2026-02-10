@@ -1,25 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
-
-export interface TextureFiles {
-  diffuse?: string;
-  normal?: string;
-  metallic?: string;
-  roughness?: string;
-  metallicRoughness?: string;
-}
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 interface ModelViewerProps {
   modelUrl?: string;
-  textures?: TextureFiles;
 }
 
-export function ModelViewer({ modelUrl, textures }: ModelViewerProps) {
+export function ModelViewer({ modelUrl }: ModelViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const isDraggingRef = useRef(false);
+  const blinkMeshesRef = useRef<THREE.Mesh[]>([]);
   const sceneRef = useRef<{
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
@@ -42,8 +34,8 @@ export function ModelViewer({ modelUrl, textures }: ModelViewerProps) {
       0.1,
       1000
     );
-    camera.position.set(0, 2, 8);
-    camera.lookAt(0, 0, 0);
+    camera.position.set(0, 1.2, 5);
+    camera.lookAt(0, 0.8, 0);
 
     // レンダラーの設定
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -51,6 +43,8 @@ export function ModelViewer({ modelUrl, textures }: ModelViewerProps) {
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
     containerRef.current.appendChild(renderer.domElement);
 
     // ライティング
@@ -70,10 +64,7 @@ export function ModelViewer({ modelUrl, textures }: ModelViewerProps) {
     fillLight.position.set(-5, 5, -5);
     scene.add(fillLight);
 
-    // 床（グリッド）
-    const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
-    gridHelper.position.y = -2;
-    scene.add(gridHelper);
+    // 床（グリッド）は非表示
 
     sceneRef.current = {
       scene,
@@ -137,15 +128,71 @@ export function ModelViewer({ modelUrl, textures }: ModelViewerProps) {
     renderer.domElement.addEventListener('mouseleave', handleMouseUp);
     renderer.domElement.addEventListener('wheel', handleWheel, { passive: false });
 
+    // まばたき管理変数
+    let lastBlinkTime = performance.now();
+    let nextBlinkInterval = 2000 + Math.random() * 3000;
+    let blinkProgress = -1;
+    let blinkCount = 0;      // 現在何回目のまばたきか
+    const BLINKS_PER_SET = 2; // 1セットあたりのまばたき回数
+
     // アニメーションループ
     const animate = () => {
       if (!sceneRef.current) return;
       
       const { scene, camera, renderer, model } = sceneRef.current;
 
-      // 自動回転
-      if (autoRotate && model) {
-        model.rotation.y += 0.005;
+      // 自動回転なし
+
+      // まばたき処理
+      const now = performance.now();
+      if (blinkProgress < 0 && now - lastBlinkTime > nextBlinkInterval) {
+        blinkProgress = 0;
+        blinkCount = 0;
+        lastBlinkTime = now;
+      }
+
+      if (blinkProgress >= 0 && blinkMeshesRef.current.length > 0) {
+        blinkProgress += 0.12;
+        const value = blinkProgress < 0.5
+          ? blinkProgress * 2       // 0→1 閉じる
+          : 2 - blinkProgress * 2;  // 1→0 開く
+
+        blinkMeshesRef.current.forEach(mesh => {
+          if (mesh.morphTargetDictionary && mesh.morphTargetInfluences) {
+            const idx = mesh.morphTargetDictionary['Blink'];
+            if (idx !== undefined) {
+              mesh.morphTargetInfluences[idx] = Math.max(0, Math.min(1, value));
+            }
+          }
+        });
+
+        if (blinkProgress >= 1) {
+          blinkCount++;
+          // まだ回数が残っていれば短い間隔で次のまばたきを開始
+          if (blinkCount < BLINKS_PER_SET) {
+            blinkProgress = -0.3; // 少し間を空けてから次のまばたき
+          } else {
+            blinkProgress = -1;
+            nextBlinkInterval = 2000 + Math.random() * 3000;
+          }
+          // 目を確実に開いた状態にリセット
+          blinkMeshesRef.current.forEach(mesh => {
+            if (mesh.morphTargetDictionary && mesh.morphTargetInfluences) {
+              const idx = mesh.morphTargetDictionary['Blink'];
+              if (idx !== undefined) {
+                mesh.morphTargetInfluences[idx] = 0;
+              }
+            }
+          });
+        }
+      }
+
+      // 2回目のまばたき待機中（短い間隔）
+      if (blinkProgress > -1 && blinkProgress < 0) {
+        blinkProgress += 0.04;
+        if (blinkProgress >= 0) {
+          blinkProgress = 0;
+        }
       }
 
       renderer.render(scene, camera);
@@ -193,144 +240,76 @@ export function ModelViewer({ modelUrl, textures }: ModelViewerProps) {
       sceneRef.current.model = null;
     }
 
-    // FBXモデルのロード
+    // まばたきメッシュ参照をリセット
+    blinkMeshesRef.current = [];
+
+    // GLBモデルのロード
     setIsLoading(true);
     setError('');
 
-    // テクスチャのロード
-    const textureLoader = new THREE.TextureLoader();
-    const loadedTextures: {
-      diffuse?: THREE.Texture;
-      normal?: THREE.Texture;
-      metallic?: THREE.Texture;
-      roughness?: THREE.Texture;
-      metallicRoughness?: THREE.Texture;
-    } = {};
+    const loader = new GLTFLoader();
+    loader.load(
+      modelUrl,
+      (gltf) => {
+        if (!sceneRef.current) return;
 
-    const texturePromises: Promise<void>[] = [];
+        const object = gltf.scene;
 
-    if (textures?.diffuse) {
-      texturePromises.push(
-        new Promise((resolve) => {
-          textureLoader.load(textures.diffuse!, (texture) => {
-            texture.colorSpace = THREE.SRGBColorSpace;
-            loadedTextures.diffuse = texture;
-            resolve();
-          }, undefined, () => resolve());
-        })
-      );
-    }
+        // モデルのサイズを正規化
+        const box = new THREE.Box3().setFromObject(object);
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const scale = 4 / maxDim;
+        object.scale.setScalar(scale);
 
-    if (textures?.normal) {
-      texturePromises.push(
-        new Promise((resolve) => {
-          textureLoader.load(textures.normal!, (texture) => {
-            loadedTextures.normal = texture;
-            resolve();
-          }, undefined, () => resolve());
-        })
-      );
-    }
+        // モデルを中央に配置
+        const center = box.getCenter(new THREE.Vector3());
+        object.position.x = -center.x * scale;
+        object.position.y = -center.y * scale;
+        object.position.z = -center.z * scale;
 
-    if (textures?.metallic) {
-      texturePromises.push(
-        new Promise((resolve) => {
-          textureLoader.load(textures.metallic!, (texture) => {
-            loadedTextures.metallic = texture;
-            resolve();
-          }, undefined, () => resolve());
-        })
-      );
-    }
+        // デバッグ: 全オブジェクト名と型を表示
+        object.traverse((child) => {
+          console.log(`[${child.type}] "${child.name}"`);
+        });
 
-    if (textures?.roughness) {
-      texturePromises.push(
-        new Promise((resolve) => {
-          textureLoader.load(textures.roughness!, (texture) => {
-            loadedTextures.roughness = texture;
-            resolve();
-          }, undefined, () => resolve());
-        })
-      );
-    }
+        // シャドウの設定 + モーフターゲットの検出
+        object.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
 
-    if (textures?.metallicRoughness) {
-      texturePromises.push(
-        new Promise((resolve) => {
-          textureLoader.load(textures.metallicRoughness!, (texture) => {
-            loadedTextures.metallicRoughness = texture;
-            resolve();
-          }, undefined, () => resolve());
-        })
-      );
-    }
-
-    const loader = new FBXLoader();
-    
-    Promise.all(texturePromises).then(() => {
-      loader.load(
-        modelUrl,
-        (object) => {
-          if (!sceneRef.current) return;
-
-          // モデルのサイズを正規化
-          const box = new THREE.Box3().setFromObject(object);
-          const size = box.getSize(new THREE.Vector3());
-          const maxDim = Math.max(size.x, size.y, size.z);
-          const scale = 4 / maxDim;
-          object.scale.setScalar(scale);
-
-          // モデルを中央に配置
-          const center = box.getCenter(new THREE.Vector3());
-          object.position.x = -center.x * scale;
-          object.position.y = -center.y * scale;
-          object.position.z = -center.z * scale;
-
-          // テクスチャとシャドウの設定
-          object.traverse((child) => {
-            if (child instanceof THREE.Mesh) {
-              child.castShadow = true;
-              child.receiveShadow = true;
-
-              // テクスチャがある場合は新しいPBRマテリアルを作成
-              if (Object.keys(loadedTextures).length > 0) {
-                const newMaterial = new THREE.MeshStandardMaterial({
-                  map: loadedTextures.diffuse || null,
-                  normalMap: loadedTextures.normal || null,
-                  metalnessMap: loadedTextures.metallic || loadedTextures.metallicRoughness || null,
-                  roughnessMap: loadedTextures.roughness || loadedTextures.metallicRoughness || null,
-                  metalness: 0.0,
-                  roughness: 0.8,
-                  side: THREE.DoubleSide,
-                });
-
-                // 既存のマテリアルを破棄
-                if (Array.isArray(child.material)) {
-                  child.material.forEach(m => m.dispose());
-                } else {
-                  child.material.dispose();
-                }
-
-                child.material = newMaterial;
-              }
+            // デバッグ: 全メッシュのモーフターゲットを表示
+            if (child.morphTargetDictionary) {
+              console.log(`Mesh "${child.name}" morph targets:`, Object.keys(child.morphTargetDictionary));
             }
-          });
 
-          scene.add(object);
-          sceneRef.current.model = object;
-          setIsLoading(false);
-        },
-        (progress) => {
-          console.log('Loading:', (progress.loaded / progress.total * 100) + '%');
-        },
-        (error) => {
-          console.error('Error loading FBX:', error);
-          setError('モデルの読み込みに失敗しました');
-          setIsLoading(false);
+            // モーフターゲット「Blink」を持つメッシュを検出
+            if (child.morphTargetDictionary && 'Blink' in child.morphTargetDictionary) {
+              blinkMeshesRef.current.push(child);
+              console.log('Blink morph target found on:', child.name);
+            }
+          }
+        });
+
+        scene.add(object);
+        sceneRef.current.model = object;
+        setIsLoading(false);
+
+        console.log('Model loaded. Blink meshes found:', blinkMeshesRef.current.length);
+      },
+      (progress) => {
+        if (progress.total > 0) {
+          console.log('Loading:', (progress.loaded / progress.total * 100).toFixed(1) + '%');
         }
-      );
-    });
-  }, [modelUrl, textures]);
+      },
+      (error) => {
+        console.error('Error loading GLB:', error);
+        setError('モデルの読み込みに失敗しました');
+        setIsLoading(false);
+      }
+    );
+  }, [modelUrl]);
 
   return (
     <div className="relative w-full h-full">
@@ -348,10 +327,6 @@ export function ModelViewer({ modelUrl, textures }: ModelViewerProps) {
         </div>
       )}
 
-      <div className="absolute bottom-4 left-4 text-white text-sm bg-black/50 px-4 py-2 rounded">
-        <p>マウスドラッグ: 回転</p>
-        <p>マウスホイール: ズーム</p>
-      </div>
     </div>
   );
 }
