@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(npm install:*)",
+      "Bash(npm run dev:*)",
+      "WebFetch(domain:127.0.0.1)",
+      "Bash(curl:*)",
+      "Bash(lsof:*)",
+      "Bash(python3:*)",
+      "Bash(ls:*)"
+    ]
+  }
+}

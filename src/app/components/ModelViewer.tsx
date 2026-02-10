@@ -25,7 +25,7 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
 
     // シーンの初期化
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x1a1a1a);
+    scene.background = null;
 
     // カメラの設定
     const camera = new THREE.PerspectiveCamera(
@@ -34,11 +34,11 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
       0.1,
       1000
     );
-    camera.position.set(0, 1.2, 5);
-    camera.lookAt(0, 0.8, 0);
+    camera.position.set(0, 0.6, 5);
+    camera.lookAt(0, 0.4, 0);
 
     // レンダラーの設定
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.shadowMap.enabled = true;
@@ -97,22 +97,28 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
 
     const handleMouseMove = (e: MouseEvent) => {
       if (!isDraggingRef.current || !sceneRef.current?.model) return;
-      
+
       const deltaX = e.clientX - previousMousePosition.x;
       const deltaY = e.clientY - previousMousePosition.y;
-      
+
       rotation.y += deltaX * 0.005;
       rotation.x += deltaY * 0.005;
       rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, rotation.x));
-      
+
       sceneRef.current.model.rotation.y = rotation.y;
       sceneRef.current.model.rotation.x = rotation.x;
-      
+
       previousMousePosition = { x: e.clientX, y: e.clientY };
     };
 
     const handleMouseUp = () => {
       isDraggingRef.current = false;
+      // 一定時間後に自動回転を再開
+      setTimeout(() => {
+        if (!isDraggingRef.current) {
+          autoRotate = true;
+        }
+      }, 2000);
     };
 
     const handleWheel = (e: WheelEvent) => {
@@ -138,10 +144,13 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
     // アニメーションループ
     const animate = () => {
       if (!sceneRef.current) return;
-      
+
       const { scene, camera, renderer, model } = sceneRef.current;
 
-      // 自動回転なし
+      // ゆっくりと自動回転
+      if (model && autoRotate) {
+        model.rotation.y += 0.003;
+      }
 
       // まばたき処理
       const now = performance.now();
@@ -267,6 +276,9 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
         object.position.x = -center.x * scale;
         object.position.y = -center.y * scale;
         object.position.z = -center.z * scale;
+
+        // モデルを少し傾ける（逆方向）
+        object.rotation.z = -0.3; // 約-8.6度傾ける
 
         // デバッグ: 全オブジェクト名と型を表示
         object.traverse((child) => {
