@@ -100,24 +100,6 @@ const fragmentShader = `
   }
 `;
 
-// Eye config: [theta (longitude), phi (latitude from top), lerpSpeed]
-// theta: 0=front, PI/2=right, PI=back, -PI/2=left
-// phi: 0=top, PI/2=equator, PI=bottom
-const EYE_CONFIGS: [number, number, number][] = [
-  [0.3, 1.1, 0.025],            // eye 1: front-right, slightly above equator
-  [Math.PI * 0.7, 0.8, 0.035],  // eye 2: back-right, upper
-  [-Math.PI * 0.4, 2.1, 0.03],  // eye 3: left, below equator
-  [Math.PI * 1.2, 1.0, 0.04],   // eye 4: back-left, near equator
-  [-0.6, 0.6, 0.028],           // eye 5: front-left, upper
-  [Math.PI * 0.5, 2, 0.032],    // eye 6: right, below equator
-  [Math.PI * 1.5, 1.2, 0.038],  // eye 7: back, slightly below equator
-  [0.1, 2, 0.027],              // eye 8: front, lower
-  // New eyes positioned between existing ones
-  [Math.PI * 0.25, 2.2, 0.033], // eye 9: between 1 and 6
-  [-Math.PI * 0.1, 1.5, 0.029], // eye 10: between 5 and 1
-  [Math.PI * 0.95, 1.1, 0.036], // eye 11: between 2 and 4
-];
-
 export function MarsSphere() {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<{
@@ -126,8 +108,6 @@ export function MarsSphere() {
     camera: THREE.PerspectiveCamera;
     sphere: THREE.Mesh;
     material: THREE.ShaderMaterial;
-    eyes: THREE.Group[];
-    eyeLocalOffsets: THREE.Vector3[];
     animationId: number;
   } | null>(null);
 
@@ -169,63 +149,12 @@ export function MarsSphere() {
     const sphere = new THREE.Mesh(geometry, material);
     scene.add(sphere);
 
-    // --- Eyes (4 eyes at scattered positions) ---
-    const createEye = (theta: number, phi: number): { group: THREE.Group; localOffset: THREE.Vector3 } => {
-      const eyeGroup = new THREE.Group();
-
-      const eyeballGeo = new THREE.SphereGeometry(0.3, 20, 20);
-      const eyeballMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-      const eyeball = new THREE.Mesh(eyeballGeo, eyeballMat);
-      eyeGroup.add(eyeball);
-
-      const pupilGeo = new THREE.SphereGeometry(0.24, 20, 20);
-      const pupilMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-      const pupil = new THREE.Mesh(pupilGeo, pupilMat);
-      pupil.position.z = 0.1;
-      eyeGroup.add(pupil);
-
-      // Spherical coordinates: place eyes embedded in the sphere surface
-      const r = sphereRadius * 0.95;
-      const localOffset = new THREE.Vector3(
-        r * Math.sin(phi) * Math.sin(theta),
-        r * Math.cos(phi),
-        r * Math.sin(phi) * Math.cos(theta)
-      );
-
-      eyeGroup.position.copy(localOffset);
-
-      // Face outward from sphere center
-      eyeGroup.lookAt(
-        localOffset.x * 2,
-        localOffset.y * 2,
-        localOffset.z * 2
-      );
-
-      return { group: eyeGroup, localOffset };
-    };
-
-    const eyes: THREE.Group[] = [];
-    const eyeLocalOffsets: THREE.Vector3[] = [];
-
-    for (const [hAngle, vAngle] of EYE_CONFIGS) {
-      const { group, localOffset } = createEye(hAngle, vAngle);
-      eyes.push(group);
-      eyeLocalOffsets.push(localOffset);
-      scene.add(group);
-    }
-
-    // Add light for eyes
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-    scene.add(ambientLight);
-
     sceneRef.current = {
       renderer,
       scene,
       camera,
       sphere,
       material,
-      eyes,
-      eyeLocalOffsets,
       animationId: 0,
     };
 
@@ -239,80 +168,12 @@ export function MarsSphere() {
 
     window.addEventListener('resize', handleResize);
 
-    // Independent blink state for each eye
-    const eyeBlinkStates = eyes.map(() => ({
-      lastBlinkTime: performance.now() + Math.random() * 2000,
-      nextBlinkInterval: 2000 + Math.random() * 3000,
-      blinkProgress: -1,
-      blinkCount: 0,
-    }));
-    const BLINKS_PER_SET = 2;
-
-    const targetPos = new THREE.Vector3();
-
     const animate = () => {
       if (!sceneRef.current) return;
-      const { scene, camera, renderer, sphere, material, eyes, eyeLocalOffsets } = sceneRef.current;
+      const { scene, camera, renderer, sphere, material } = sceneRef.current;
 
       material.uniforms.time.value += 0.005;
       sphere.rotation.y -= 0.002;
-
-      // --- Update eye positions with inertia ---
-      sphere.updateMatrixWorld();
-      for (let i = 0; i < eyes.length; i++) {
-        // Compute target position by applying sphere's world matrix to local offset
-        targetPos.copy(eyeLocalOffsets[i]);
-        targetPos.applyMatrix4(sphere.matrixWorld);
-
-        // Lerp toward target with per-eye speed
-        const lerpSpeed = EYE_CONFIGS[i][2];
-        eyes[i].position.lerp(targetPos, lerpSpeed);
-
-        // Update orientation to face outward
-        const outward = eyes[i].position.clone().multiplyScalar(2);
-        eyes[i].lookAt(outward);
-      }
-
-      // --- Independent blink animation for each eye ---
-      const now = performance.now();
-      for (let i = 0; i < eyes.length; i++) {
-        const blinkState = eyeBlinkStates[i];
-
-        if (blinkState.blinkProgress < 0 && now - blinkState.lastBlinkTime > blinkState.nextBlinkInterval) {
-          blinkState.blinkProgress = 0;
-          blinkState.blinkCount = 0;
-          blinkState.lastBlinkTime = now;
-        }
-
-        if (blinkState.blinkProgress >= 0) {
-          blinkState.blinkProgress += 0.12;
-          const scaleY = blinkState.blinkProgress < 0.5
-            ? 1 - blinkState.blinkProgress * 2
-            : (blinkState.blinkProgress - 0.5) * 2;
-
-          eyes[i].scale.y = Math.max(0.05, scaleY);
-
-          if (blinkState.blinkProgress >= 1) {
-            blinkState.blinkCount++;
-            eyes[i].scale.y = 1;
-
-            if (blinkState.blinkCount < BLINKS_PER_SET) {
-              blinkState.blinkProgress = -0.3;
-            } else {
-              blinkState.blinkProgress = -1;
-              blinkState.nextBlinkInterval = 2000 + Math.random() * 3000;
-            }
-          }
-        }
-
-        // Rest phase between double blinks
-        if (blinkState.blinkProgress > -1 && blinkState.blinkProgress < 0) {
-          blinkState.blinkProgress += 0.04;
-          if (blinkState.blinkProgress >= 0) {
-            blinkState.blinkProgress = 0;
-          }
-        }
-      }
 
       renderer.render(scene, camera);
       sceneRef.current.animationId = requestAnimationFrame(animate);
