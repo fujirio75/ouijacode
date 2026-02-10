@@ -1,0 +1,259 @@
+.mars-page {
+  --paper: #FFFFFF;
+  --ink: #000000;
+  --rust: #333333;
+  --terra-green: #111111;
+  --sun-gold: #888888;
+  --pad-sm: 12px;
+  --pad-md: 24px;
+  --pad-lg: 48px;
+  --pad-xl: 96px;
+  --border-width: 2px;
+
+  width: 100vw;
+  min-height: 100vh;
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: 'Syne', sans-serif;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* UI Layer */
+.mars-ui-layer {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  pointer-events: none;
+}
+
+.mars-interactive {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* Header */
+.mars-header {
+  padding: var(--pad-md);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.75rem;
+  font-family: 'Space Mono', monospace;
+  border-bottom: var(--border-width) solid var(--ink);
+  pointer-events: auto;
+}
+
+.mars-brand-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mars-status-dot {
+  width: 10px;
+  height: 10px;
+  background-color: var(--ink);
+  border-radius: 0%;
+  animation: mars-pulse 1.5s infinite;
+}
+
+@keyframes mars-pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+/* Main */
+.mars-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  padding: var(--pad-md);
+}
+
+/* Hero Title */
+.mars-hero-title-wrapper {
+  position: relative;
+  text-align: center;
+  mix-blend-mode: difference;
+}
+
+.mars-title {
+  font-family: 'Abril Fatface', serif;
+  font-size: clamp(6rem, 18vw, 22rem);
+  line-height: 0.8;
+  color: var(--paper);
+  position: relative;
+  z-index: 2;
+  letter-spacing: -0.04em;
+  text-align: center;
+}
+
+.mars-star-graphic {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  top: -20px;
+  right: -40px;
+}
+
+/* Subtitle Pills */
+.mars-subtitle-pill-cluster {
+  display: flex;
+  gap: 0;
+  justify-content: center;
+  margin-top: -2vw;
+  position: relative;
+  z-index: 3;
+  flex-wrap: wrap;
+}
+
+.mars-pill {
+  border: var(--border-width) solid var(--ink);
+  padding: 8px 24px;
+  border-radius: 0px;
+  font-family: 'Space Mono', monospace;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.9rem;
+  background: var(--paper);
+  color: var(--ink);
+  transition: all 0.2s ease;
+  margin-right: -2px;
+  text-decoration: none;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.mars-pill:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.mars-pill-accent {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.mars-pill-accent:hover {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* Data Blocks */
+.mars-data-block {
+  position: absolute;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.65rem;
+  line-height: 1.4;
+  color: var(--ink);
+  max-width: 150px;
+  font-weight: 700;
+}
+
+.mars-data-tl {
+  top: 20%;
+  left: 5%;
+  text-align: left;
+}
+
+.mars-data-tr {
+  top: 25%;
+  right: 5%;
+  text-align: right;
+}
+
+/* Footer / Grunge Map */
+.mars-grunge-map {
+  width: 100%;
+  height: 25vh;
+  background-color: var(--paper);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  padding: var(--pad-md);
+  border-top: var(--border-width) solid var(--ink);
+  margin-top: auto;
+}
+
+.mars-map-texture {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--ink);
+  clip-path: polygon(
+    0% 0%, 20% 0%, 30% 0%, 45% 0%,
+    40% 0%, 55% 0%, 65% 0%, 80% 0%,
+    90% 0%, 100% 0%, 100% 100%, 0% 100%
+  );
+  opacity: 1;
+}
+
+.mars-map-texture-2 {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--ink);
+  opacity: 0.2;
+  filter: url('#noise');
+  mix-blend-mode: multiply;
+}
+
+.mars-footer-content {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  color: var(--paper);
+  font-family: 'Space Mono', monospace;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  mix-blend-mode: difference;
+}
+
+.mars-coordinate-circle {
+  width: 60px;
+  height: 60px;
+  border: var(--border-width) solid var(--paper);
+  border-radius: 0%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: rotate(0deg);
+}
+
+.mars-line-graphic {
+  width: 100%;
+  height: var(--border-width);
+  background: currentColor;
+  transform: rotate(90deg);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .mars-title {
+    font-size: 18vw;
+  }
+  .mars-data-block {
+    display: none;
+  }
+  .mars-grunge-map {
+    height: 15vh;
+  }
+}
