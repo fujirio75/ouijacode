@@ -362,13 +362,7 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
   return (
     <div className="relative w-full h-full">
       <div ref={containerRef} className="w-full h-full" />
-      
-      {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-          <div className="text-white text-lg">モデル読み込み中...</div>
-        </div>
-      )}
-      
+
       {error && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50">
           <div className="text-red-400 text-lg">{error}</div>

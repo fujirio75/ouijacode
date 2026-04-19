@@ -14,48 +14,27 @@ const RED = '#FF5656';
 export function FixDesign() {
   return (
     <div
-      className="relative h-dvh min-h-screen w-full overflow-hidden"
+      className="fixdesign-root relative flex h-dvh min-h-screen w-full flex-col overflow-hidden"
       style={{ backgroundColor: BG_DARK }}
     >
-      {/* 3Dステージを viewport 全体に広げ、ヘッダー/フッターは上に重ねる */}
-      <main
-        className="absolute inset-x-0 top-1/2 -translate-y-1/2"
-        style={{
-          height: 'min(100dvh, calc(100vw * 1.2))',
-        }}
-      >
+      {/* 3Dステージは footer を除いた残り高さを埋める */}
+      <main className="fixdesign-stage relative min-h-0 flex-1">
         {/* レイヤー1: w3 ストロークロゴ（最背面） */}
         <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
           <img
             src={assetPath('w3-logo.svg')}
             alt=""
             aria-hidden="true"
-            className="w-[83%] max-w-[1071px]"
+            className="fixdesign-w3-logo"
           />
         </div>
 
         {/* レイヤー2: 3Dモデル（猫）— 中間レイヤー、画面いっぱい */}
-        <div className="absolute inset-0 z-10">
+        <div className="fixdesign-model-layer absolute inset-0 z-10">
           <ModelViewer modelUrl={DEFAULT_MODEL} />
         </div>
 
-        {/* レイヤー3: "Software" SVG（最前面 — 猫の手前） */}
-        <div
-          className="pointer-events-none absolute z-20"
-          style={{
-            bottom: 'clamp(120px, 17vh, 180px)',
-            left: '50%',
-            transform: 'translateX(-50%)',
-          }}
-        >
-          <img
-            src={assetPath('software-large.svg')}
-            alt="Software"
-            className="w-[clamp(230px,36vw,458px)]"
-          />
-        </div>
       </main>
-
       {/* ヘッダー: w3 | game engineering | software (SVGアウトライン) */}
       <header className="absolute inset-x-0 top-0 z-30 flex items-center justify-between px-[3.75%] py-[4.3%]">
         <img src={assetPath('header-w3.svg')} alt="w3" className="h-[11px]" />
@@ -63,8 +42,16 @@ export function FixDesign() {
         <img src={assetPath('header-software.svg')} alt="software" className="h-[11px]" />
       </header>
 
-      {/* 区切り線 + フッターを前面オーバーレイ */}
-      <div className="absolute inset-x-0 bottom-0 z-30">
+      {/* 区切り線 + フッター */}
+      <div className="fixdesign-footer-shell relative z-30 shrink-0">
+        <div className="fixdesign-footer-software pointer-events-none absolute inset-x-0 flex justify-center">
+          <img
+            src={assetPath('software-large.svg')}
+            alt="Software"
+            className="fixdesign-software-logo"
+          />
+        </div>
+
         <div
           className="mx-[3.75%]"
           style={{
@@ -74,10 +61,7 @@ export function FixDesign() {
           }}
         />
 
-        <footer
-          className="flex items-start justify-between px-[3.75%] py-5"
-          style={{ color: RED }}
-        >
+        <footer className="fixdesign-footer flex items-start justify-between px-[3.75%] py-5" style={{ color: RED }}>
           {/* ソーシャルアイコン */}
           <div className="flex items-center gap-3">
             <a href="#" aria-label="X (Twitter)">
@@ -107,7 +91,7 @@ export function FixDesign() {
 
           {/* number */}
           <div
-            className="text-right"
+            className="fixdesign-footer-number text-right"
             style={{
               fontFamily: "'Sofia Pro', sans-serif",
               fontWeight: 500,

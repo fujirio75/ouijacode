@@ -192,3 +192,79 @@
     line-height: 1.5;
   }
 }
+
+.fixdesign-root {
+  height: 100dvh;
+  min-height: 100dvh;
+}
+
+.fixdesign-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.fixdesign-model-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.fixdesign-footer-shell {
+  position: relative;
+  inset-inline: auto;
+  bottom: auto;
+}
+
+.fixdesign-footer-software {
+  top: clamp(-128px, -38vh, -40px);
+}
+
+.fixdesign-footer {
+  position: relative;
+}
+
+.fixdesign-w3-logo {
+  width: 83%;
+  max-width: 1071px;
+}
+
+.fixdesign-software-logo {
+  width: clamp(230px, 36vw, 458px);
+  max-width: none;
+}
+
+@media (max-width: 500px) {
+  .fixdesign-root {
+    overflow: visible;
+  }
+
+  .fixdesign-model-layer {
+    inset: 50% 0 auto;
+    transform: translateY(-50%);
+    height: clamp(300px, 78vw, 420px);
+  }
+
+  .fixdesign-footer-software {
+    top: -144px;
+    transform: none;
+  }
+
+  .fixdesign-w3-logo {
+    width: 96%;
+  }
+
+  .fixdesign-software-logo {
+    width: 80vw;
+  }
+
+  .fixdesign-footer {
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    padding-top: 20px;
+  }
+
+  .fixdesign-footer-number {
+    text-align: center;
+  }
+}
