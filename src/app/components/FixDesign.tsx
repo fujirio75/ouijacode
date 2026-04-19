@@ -36,7 +36,7 @@ export function FixDesign() {
 
       </main>
       {/* ヘッダー: w3 | game engineering | software (SVGアウトライン) */}
-      <header className="absolute inset-x-0 top-0 z-30 flex items-center justify-between px-[3.75%] py-[4.3%]">
+      <header className="absolute inset-x-0 top-0 z-30 flex items-center justify-between px-[3.75%] py-[32px]">
         <img src={assetPath('header-w3.svg')} alt="w3" className="h-[11px]" />
         <img src={assetPath('header-game-engineering.svg')} alt="game engineering" className="h-[14px]" />
         <img src={assetPath('header-software.svg')} alt="software" className="h-[11px]" />
