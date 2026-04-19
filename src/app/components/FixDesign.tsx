@@ -40,7 +40,7 @@ export function FixDesign() {
           style={{
             bottom: 'clamp(120px, 17vh, 180px)',
             left: '50%',
-            transform: 'translateX(-35%)',
+            transform: 'translateX(-50%)',
           }}
         >
           <img
@@ -77,9 +77,6 @@ export function FixDesign() {
           <div className="flex items-center gap-3">
             <a href="#" aria-label="X (Twitter)">
               <img src={assetPath('icon-x.svg')} alt="X" className="h-[15px] w-[15px]" />
-            </a>
-            <a href="#" aria-label="Instagram">
-              <img src={assetPath('icon-twitch.svg')} alt="Instagram" className="h-[17px] w-[17px]" />
             </a>
           </div>
 
