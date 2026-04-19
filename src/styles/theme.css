@@ -216,7 +216,7 @@
 }
 
 .fixdesign-footer-software {
-  top: clamp(-128px, -38vh, -40px);
+  top: clamp(-208px,-38vh,-40px);
 }
 
 .fixdesign-footer {
@@ -225,7 +225,6 @@
 
 .fixdesign-w3-logo {
   width: 83%;
-  max-width: 1071px;
 }
 
 .fixdesign-software-logo {
