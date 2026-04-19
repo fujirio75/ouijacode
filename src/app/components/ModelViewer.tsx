@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
+const ENABLE_MODEL_INTERACTION = false;
+
 interface ModelViewerProps {
   modelUrl?: string;
 }
@@ -12,6 +14,7 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
   const [error, setError] = useState<string>('');
   const isDraggingRef = useRef(false);
   const blinkMeshesRef = useRef<THREE.Mesh[]>([]);
+  const armBonesRef = useRef<{ left: THREE.Bone | null; right: THREE.Bone | null }>({ left: null, right: null });
   const sceneRef = useRef<{
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
@@ -25,7 +28,7 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
 
     // シーンの初期化
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x1a1a1a);
+    scene.background = null; // 背景透過
 
     // カメラの設定
     const camera = new THREE.PerspectiveCamera(
@@ -34,11 +37,12 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
       0.1,
       1000
     );
-    camera.position.set(0, 1.2, 5);
-    camera.lookAt(0, 0.8, 0);
+    camera.position.set(1, 2, 5);
+    camera.lookAt(0, 0, 0);
 
     // レンダラーの設定
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setClearColor(0x000000, 0); // 透過背景
     renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.shadowMap.enabled = true;
@@ -86,7 +90,7 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
 
     // マウスコントロール
     let previousMousePosition = { x: 0, y: 0 };
-    let rotation = { x: 0, y: 0 };
+    let rotation = { x: 0.05, y: -0.1 };
     let autoRotate = true;
 
     const handleMouseDown = (e: MouseEvent) => {
@@ -122,11 +126,13 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
       sceneRef.current.camera.position.z = Math.max(3, Math.min(20, sceneRef.current.camera.position.z));
     };
 
-    renderer.domElement.addEventListener('mousedown', handleMouseDown);
-    renderer.domElement.addEventListener('mousemove', handleMouseMove);
-    renderer.domElement.addEventListener('mouseup', handleMouseUp);
-    renderer.domElement.addEventListener('mouseleave', handleMouseUp);
-    renderer.domElement.addEventListener('wheel', handleWheel, { passive: false });
+    if (ENABLE_MODEL_INTERACTION) {
+      renderer.domElement.addEventListener('mousedown', handleMouseDown);
+      renderer.domElement.addEventListener('mousemove', handleMouseMove);
+      renderer.domElement.addEventListener('mouseup', handleMouseUp);
+      renderer.domElement.addEventListener('mouseleave', handleMouseUp);
+      renderer.domElement.addEventListener('wheel', handleWheel, { passive: false });
+    }
 
     // まばたき管理変数
     let lastBlinkTime = performance.now();
@@ -135,13 +141,33 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
     let blinkCount = 0;      // 現在何回目のまばたきか
     const BLINKS_PER_SET = 2; // 1セットあたりのまばたき回数
 
+    // 浮遊アニメーション用の基準Y位置
+    let floatBaseY = 0;
+    let floatBaseYSet = false;
+
     // アニメーションループ
     const animate = () => {
       if (!sceneRef.current) return;
-      
-      const { scene, camera, renderer, model } = sceneRef.current;
 
-      // 自動回転なし
+      const { scene, camera, renderer, model } = sceneRef.current;
+      const time = performance.now() * 0.001; // 秒に変換
+
+      // 浮遊アニメーション（ゆっくり上下にぷかぷか）
+      if (model) {
+        if (!floatBaseYSet) {
+          floatBaseY = model.position.y;
+          floatBaseYSet = true;
+        }
+        model.position.y = floatBaseY + Math.sin(time * 1.2) * 0.15;
+      }
+
+      // 腕のふわふわアニメーション（胴体に寄せた状態 + ゆらゆら）
+      if (armBonesRef.current.left) {
+        armBonesRef.current.left.rotation.x = -0.8 + Math.sin(time * 1.5) * 0.15;
+      }
+      if (armBonesRef.current.right) {
+        armBonesRef.current.right.rotation.x = -0.6 + Math.sin(time * 1.5 + Math.PI) * 0.15;
+      }
 
       // まばたき処理
       const now = performance.now();
@@ -206,11 +232,13 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
       window.removeEventListener('resize', handleResize);
       if (sceneRef.current) {
         cancelAnimationFrame(sceneRef.current.animationId);
-        renderer.domElement.removeEventListener('mousedown', handleMouseDown);
-        renderer.domElement.removeEventListener('mousemove', handleMouseMove);
-        renderer.domElement.removeEventListener('mouseup', handleMouseUp);
-        renderer.domElement.removeEventListener('mouseleave', handleMouseUp);
-        renderer.domElement.removeEventListener('wheel', handleWheel);
+        if (ENABLE_MODEL_INTERACTION) {
+          renderer.domElement.removeEventListener('mousedown', handleMouseDown);
+          renderer.domElement.removeEventListener('mousemove', handleMouseMove);
+          renderer.domElement.removeEventListener('mouseup', handleMouseUp);
+          renderer.domElement.removeEventListener('mouseleave', handleMouseUp);
+          renderer.domElement.removeEventListener('wheel', handleWheel);
+        }
         renderer.dispose();
         if (containerRef.current?.contains(renderer.domElement)) {
           containerRef.current.removeChild(renderer.domElement);
@@ -240,8 +268,9 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
       sceneRef.current.model = null;
     }
 
-    // まばたきメッシュ参照をリセット
+    // まばたきメッシュ・腕ボーン参照をリセット
     blinkMeshesRef.current = [];
+    armBonesRef.current = { left: null, right: null };
 
     // GLBモデルのロード
     setIsLoading(true);
@@ -273,6 +302,20 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
           console.log(`[${child.type}] "${child.name}"`);
         });
 
+        // ボーンの検出（腕）
+        object.traverse((child) => {
+          if (child instanceof THREE.Bone) {
+            if (child.name === 'Bone002') {
+              armBonesRef.current.left = child;
+              console.log('Left arm bone found:', child.name);
+            }
+            if (child.name === 'Bone004') {
+              armBonesRef.current.right = child;
+              console.log('Right arm bone found:', child.name);
+            }
+          }
+        });
+
         // シャドウの設定 + モーフターゲットの検出
         object.traverse((child) => {
           if (child instanceof THREE.Mesh) {
@@ -291,6 +334,11 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
             }
           }
         });
+
+        // 初期回転を適用（デザインに合わせた傾き）
+        object.rotation.x = -0.5;  // ごくわずかな前傾
+        object.rotation.y = -0.05;  // ほぼ正面、わずかに左向き
+        object.rotation.z = -0.1;
 
         scene.add(object);
         sceneRef.current.model = object;

@@ -1,83 +1,123 @@
 import { ModelViewer } from '@/app/components/ModelViewer';
-import { Twitter, Instagram } from 'lucide-react';
 
 const DEFAULT_MODEL = '/models/chara.glb';
 
-const YELLOW = '#E5C76B';
-const BG_DARK = '#1a1a1a';
+const BG_DARK = '#272727';
+const RED = '#FF5656';
 
 /**
- * FIX_DESIGN フレームの実装
- * 3DModel エリアには既存のキャラクター3D（chara.glb）を表示
+ * FIX_DESIGN フレームの実装 — Figmaデザイン忠実再現
+ * レイヤー順: w3ロゴ(後ろ) → 3Dモデル(猫) → Software(手前)
  */
 export function FixDesign() {
   return (
     <div
-      className="flex min-h-screen w-full flex-col text-white"
+      className="relative h-dvh min-h-screen w-full overflow-hidden"
       style={{ backgroundColor: BG_DARK }}
     >
-      {/* ヘッダー: ouija | game engineering | code */}
-      <header className="flex shrink-0 items-center justify-between px-6 py-5 uppercase tracking-wide" style={{ color: YELLOW }}>
-        <span className="text-lg font-medium">ouija</span>
-        <span className="text-lg font-medium">game engineering</span>
-        <span className="text-lg font-medium">code</span>
-      </header>
-
-      {/* メイン: 大きなオーバーレイテキスト + 中央に3DModel */}
-      <main className="relative flex flex-1 flex-col items-center justify-center overflow-hidden px-4">
-        {/* 背面レイヤー: 大きな ouija / code テキスト */}
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-between px-4 sm:px-8 md:px-12">
-          <span
-            className="text-[clamp(4rem,15vw,12rem)] font-bold uppercase leading-none tracking-tight opacity-90"
-            style={{ color: YELLOW }}
-            aria-hidden
-          >
-            ouija
-          </span>
-          <span
-            className="text-[clamp(4rem,15vw,12rem)] font-bold uppercase leading-none tracking-tight opacity-90"
-            style={{ color: YELLOW }}
-            aria-hidden
-          >
-            code
-          </span>
+      {/* 3Dステージを viewport 全体に広げ、ヘッダー/フッターは上に重ねる */}
+      <main className="absolute inset-0">
+        {/* レイヤー1: w3 ストロークロゴ（最背面） */}
+        <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
+          <img
+            src="/w3-logo.svg"
+            alt=""
+            aria-hidden="true"
+            className="w-[83%] max-w-[1071px]"
+          />
         </div>
 
-        {/* 前面レイヤー: 3DModel エリア（既存キャラクター3D） */}
-        <section
-          data-area="3DModel"
-          className="relative z-10 h-[min(60vh,520px)] w-full max-w-lg overflow-hidden rounded-2xl"
-          aria-label="3D Model"
+        {/* レイヤー2: 3Dモデル（猫）— 中間レイヤー、画面いっぱい */}
+        <div className="absolute inset-0 z-10">
+          <ModelViewer modelUrl={DEFAULT_MODEL} />
+        </div>
+
+        {/* レイヤー3: "Software" SVG（最前面 — 猫の手前） */}
+        <div
+          className="pointer-events-none absolute z-20"
+          style={{
+            bottom: 'clamp(120px, 17vh, 180px)',
+            left: '50%',
+            transform: 'translateX(-35%)',
+          }}
         >
-          <div className="h-full w-full">
-            <ModelViewer modelUrl={DEFAULT_MODEL} />
-          </div>
-        </section>
+          <img
+            src="/software-large.svg"
+            alt="Software"
+            className="w-[clamp(230px,36vw,458px)]"
+          />
+        </div>
       </main>
 
-      {/* フッター: アイコン | 説明文 | number */}
-      <footer className="flex shrink-0 flex-wrap items-end justify-between gap-6 px-6 py-6 text-sm text-white/90">
-        <div className="flex items-center gap-4">
-          <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" className="transition-opacity hover:opacity-80" aria-label="X (Twitter)">
-            <Twitter size={20} strokeWidth={1.5} />
-          </a>
-          <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="transition-opacity hover:opacity-80" aria-label="Instagram">
-            <Instagram size={20} strokeWidth={1.5} />
-          </a>
-        </div>
-        <div className="max-w-xl text-center text-xs leading-relaxed">
-          <p>
-            ouija code is a game engineer who builds simple, thoughtful interactive experiences with a minimalist, detail-driven approach.
-          </p>
-          <p className="mt-1">
-            He enjoys shaping quiet, refined gameplay feel—tight controls and polished performance. Developed by Rio Fujimoto.
-          </p>
-        </div>
-        <div className="text-right text-xs">
-          <div>number:</div>
-          <div className="font-mono tracking-widest">0000000000000</div>
-        </div>
-      </footer>
+      {/* ヘッダー: w3 | game engineering | software (SVGアウトライン) */}
+      <header className="absolute inset-x-0 top-0 z-30 flex items-center justify-between px-[3.75%] py-[4.3%]">
+        <img src="/header-w3.svg" alt="w3" className="h-[11px]" />
+        <img src="/header-game-engineering.svg" alt="game engineering" className="h-[14px]" />
+        <img src="/header-software.svg" alt="software" className="h-[11px]" />
+      </header>
+
+      {/* 区切り線 + フッターを前面オーバーレイ */}
+      <div className="absolute inset-x-0 bottom-0 z-30">
+        <div
+          className="mx-[3.75%]"
+          style={{
+            height: '1px',
+            backgroundColor: RED,
+            opacity: 0.33,
+          }}
+        />
+
+        <footer
+          className="flex items-start justify-between px-[3.75%] py-5"
+          style={{ color: RED }}
+        >
+          {/* ソーシャルアイコン */}
+          <div className="flex items-center gap-3">
+            <a href="#" aria-label="X (Twitter)">
+              <img src="/icon-x.svg" alt="X" className="h-[15px] w-[15px]" />
+            </a>
+            <a href="#" aria-label="Instagram">
+              <img src="/icon-twitch.svg" alt="Instagram" className="h-[17px] w-[17px]" />
+            </a>
+          </div>
+
+          {/* 説明テキスト */}
+          <div
+            className="max-w-[660px] text-center"
+            style={{
+              fontFamily: "'Sofia Pro', sans-serif",
+              fontWeight: 500,
+              fontSize: '11px',
+              letterSpacing: '0.22px',
+              lineHeight: '140%',
+              color: RED,
+            }}
+          >
+            <p>
+              ouija code is a game engineer who builds simple, thoughtful interactive experiences with a minimalist, detail-driven approach.
+            </p>
+            <p>
+              He enjoys shaping quiet, refined gameplay feel—tight controls and polished performance. Developed by Rio Fujimoto.
+            </p>
+          </div>
+
+          {/* number */}
+          <div
+            className="text-right"
+            style={{
+              fontFamily: "'Sofia Pro', sans-serif",
+              fontWeight: 500,
+              fontSize: '11px',
+              letterSpacing: '0.22px',
+              lineHeight: '140%',
+              color: RED,
+            }}
+          >
+            <div>number:</div>
+            <div>0000000000000</div>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 }
