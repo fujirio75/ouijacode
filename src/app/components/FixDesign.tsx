@@ -21,7 +21,7 @@ export function FixDesign() {
       <main
         className="absolute inset-x-0 top-1/2 -translate-y-1/2"
         style={{
-          height: 'min(100dvh, calc(100vw * 1.72))',
+          height: 'min(100dvh, calc(100vw * 1.2))',
         }}
       >
         {/* レイヤー1: w3 ストロークロゴ（最背面） */}
