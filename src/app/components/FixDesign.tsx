@@ -18,7 +18,12 @@ export function FixDesign() {
       style={{ backgroundColor: BG_DARK }}
     >
       {/* 3Dステージを viewport 全体に広げ、ヘッダー/フッターは上に重ねる */}
-      <main className="absolute inset-0">
+      <main
+        className="absolute inset-x-0 top-1/2 -translate-y-1/2"
+        style={{
+          height: 'min(100dvh, calc(100vw * 1.72))',
+        }}
+      >
         {/* レイヤー1: w3 ストロークロゴ（最背面） */}
         <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
           <img
