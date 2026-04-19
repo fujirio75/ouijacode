@@ -1,6 +1,8 @@
 import { ModelViewer } from '@/app/components/ModelViewer';
 
-const DEFAULT_MODEL = '/models/chara.glb';
+const assetPath = (path: string) => `${import.meta.env.BASE_URL}${path.replace(/^\//, '')}`;
+
+const DEFAULT_MODEL = assetPath('models/chara.glb');
 
 const BG_DARK = '#272727';
 const RED = '#FF5656';
@@ -20,7 +22,7 @@ export function FixDesign() {
         {/* レイヤー1: w3 ストロークロゴ（最背面） */}
         <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
           <img
-            src="/w3-logo.svg"
+            src={assetPath('w3-logo.svg')}
             alt=""
             aria-hidden="true"
             className="w-[83%] max-w-[1071px]"
@@ -42,7 +44,7 @@ export function FixDesign() {
           }}
         >
           <img
-            src="/software-large.svg"
+            src={assetPath('software-large.svg')}
             alt="Software"
             className="w-[clamp(230px,36vw,458px)]"
           />
@@ -51,9 +53,9 @@ export function FixDesign() {
 
       {/* ヘッダー: w3 | game engineering | software (SVGアウトライン) */}
       <header className="absolute inset-x-0 top-0 z-30 flex items-center justify-between px-[3.75%] py-[4.3%]">
-        <img src="/header-w3.svg" alt="w3" className="h-[11px]" />
-        <img src="/header-game-engineering.svg" alt="game engineering" className="h-[14px]" />
-        <img src="/header-software.svg" alt="software" className="h-[11px]" />
+        <img src={assetPath('header-w3.svg')} alt="w3" className="h-[11px]" />
+        <img src={assetPath('header-game-engineering.svg')} alt="game engineering" className="h-[14px]" />
+        <img src={assetPath('header-software.svg')} alt="software" className="h-[11px]" />
       </header>
 
       {/* 区切り線 + フッターを前面オーバーレイ */}
@@ -74,10 +76,10 @@ export function FixDesign() {
           {/* ソーシャルアイコン */}
           <div className="flex items-center gap-3">
             <a href="#" aria-label="X (Twitter)">
-              <img src="/icon-x.svg" alt="X" className="h-[15px] w-[15px]" />
+              <img src={assetPath('icon-x.svg')} alt="X" className="h-[15px] w-[15px]" />
             </a>
             <a href="#" aria-label="Instagram">
-              <img src="/icon-twitch.svg" alt="Instagram" className="h-[17px] w-[17px]" />
+              <img src={assetPath('icon-twitch.svg')} alt="Instagram" className="h-[17px] w-[17px]" />
             </a>
           </div>
 
@@ -94,10 +96,10 @@ export function FixDesign() {
             }}
           >
             <p>
-              ouija code is a game engineer who builds simple, thoughtful interactive experiences with a minimalist, detail-driven approach.
+              w3 software is a game engineer who builds simple, thoughtful interactive experiences with a minimalist, detail-driven approach.
             </p>
             <p>
-              He enjoys shaping quiet, refined gameplay feel—tight controls and polished performance. Developed by Rio Fujimoto.
+              He enjoys shaping quiet, refined gameplay feel—tight controls and polished performance.
             </p>
           </div>
 
