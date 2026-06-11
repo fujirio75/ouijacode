@@ -35,15 +35,15 @@ jobs:
         run: npm ci
 
       - name: Build main (chara2.glb)
-        run: npm run build && mv dist dist-main
+        run: npm run build -- --outDir=dist-main
 
       - name: Build betsuann (chara.glb)
-        run: VITE_MODEL_FILE=chara.glb npm run build -- --base=/ouijacode/betsuann/
+        run: VITE_MODEL_FILE=chara.glb npm run build -- --base=/ouijacode/betsuann/ --outDir=dist-betsuann
 
       - name: Merge betsuann into main dist
         run: |
           mkdir -p dist-main/betsuann
-          cp -r dist/. dist-main/betsuann/
+          cp -r dist-betsuann/. dist-main/betsuann/
           mv dist-main dist
 
       - name: Setup Pages
