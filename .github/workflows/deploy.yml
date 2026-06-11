@@ -34,8 +34,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
-        run: npm run build
+      - name: Build main (chara2.glb)
+        run: npm run build && mv dist dist-main
+
+      - name: Build betsuann (chara.glb)
+        run: VITE_MODEL_FILE=chara.glb npm run build -- --base=/ouijacode/betsuann/
+
+      - name: Merge betsuann into main dist
+        run: |
+          mkdir -p dist-main/betsuann
+          cp -r dist/. dist-main/betsuann/
+          mv dist-main dist
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

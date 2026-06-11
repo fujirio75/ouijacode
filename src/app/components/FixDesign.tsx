@@ -2,7 +2,7 @@ import { ModelViewer } from '@/app/components/ModelViewer';
 
 const assetPath = (path: string) => `${import.meta.env.BASE_URL}${path.replace(/^\//, '')}`;
 
-const DEFAULT_MODEL = assetPath('models/chara.glb');
+const DEFAULT_MODEL = assetPath(`models/${import.meta.env.VITE_MODEL_FILE ?? 'chara2.glb'}`);
 
 const BG_DARK = '#272727';
 const RED = '#FF5656';
