@@ -288,13 +288,13 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
         const box = new THREE.Box3().setFromObject(object);
         const size = box.getSize(new THREE.Vector3());
         const maxDim = Math.max(size.x, size.y, size.z);
-        const scale = 4 / maxDim;
+        const scale = 5 / maxDim;
         object.scale.setScalar(scale);
 
         // モデルを中央に配置
         const center = box.getCenter(new THREE.Vector3());
-        object.position.x = -center.x * scale;
-        object.position.y = -center.y * scale;
+        object.position.x = -center.x * scale - 0.5;
+        object.position.y = -center.y * scale - 0.6;
         object.position.z = -center.z * scale;
 
         // デバッグ: 全オブジェクト名と型を表示
