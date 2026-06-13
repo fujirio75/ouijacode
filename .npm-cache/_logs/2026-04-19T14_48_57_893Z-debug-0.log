@@ -1,0 +1,50 @@
+0 verbose cli /opt/homebrew/Cellar/node/23.10.0/bin/node /opt/homebrew/bin/npm
+1 info using npm@11.6.2
+2 info using node@v23.10.0
+3 silly config load:file:/opt/homebrew/lib/node_modules/npm/npmrc
+4 silly config load:file:/Users/fujirio75/dev/w3software/.npmrc
+5 silly config load:file:/Users/fujirio75/.npmrc
+6 silly config load:file:/opt/homebrew/etc/npmrc
+7 verbose title npm install
+8 verbose argv "install" "--package-lock-only" "--cache" "/Users/fujirio75/dev/w3software/.npm-cache"
+9 verbose logfile logs-max:10 dir:/Users/fujirio75/dev/w3software/.npm-cache/_logs/2026-04-19T14_48_57_893Z-
+10 verbose logfile /Users/fujirio75/dev/w3software/.npm-cache/_logs/2026-04-19T14_48_57_893Z-debug-0.log
+11 silly logfile done cleaning log files
+12 http fetch GET https://registry.npmjs.org/npm attempt 1 failed with ENOTFOUND
+13 silly packumentCache heap:4345298944 maxSize:1086324736 maxEntrySize:543162368
+14 silly idealTree buildDeps
+15 http cache https://registry.npmjs.org/@tailwindcss/oxide-wasm32-wasi/-/oxide-wasm32-wasi-4.1.12.tgz 0ms (cache hit)
+16 silly tarball no local data for https://registry.npmjs.org/@tailwindcss/oxide-wasm32-wasi/-/oxide-wasm32-wasi-4.1.12.tgz. Extracting by manifest.
+17 http fetch GET https://registry.npmjs.org/@tailwindcss/oxide-wasm32-wasi/-/oxide-wasm32-wasi-4.1.12.tgz attempt 1 failed with ENOTFOUND
+18 http fetch GET https://registry.npmjs.org/npm attempt 2 failed with ENOTFOUND
+19 http fetch GET https://registry.npmjs.org/@tailwindcss/oxide-wasm32-wasi/-/oxide-wasm32-wasi-4.1.12.tgz attempt 2 failed with ENOTFOUND
+20 http fetch GET https://registry.npmjs.org/npm attempt 3 failed with ENOTFOUND
+21 http fetch GET https://registry.npmjs.org/@tailwindcss/oxide-wasm32-wasi/-/oxide-wasm32-wasi-4.1.12.tgz attempt 3 failed with ENOTFOUND
+22 verbose type system
+23 verbose stack FetchError: request to https://registry.npmjs.org/@tailwindcss/oxide-wasm32-wasi/-/oxide-wasm32-wasi-4.1.12.tgz failed, reason: getaddrinfo ENOTFOUND registry.npmjs.org
+23 verbose stack     at ClientRequest.<anonymous> (/opt/homebrew/lib/node_modules/npm/node_modules/minipass-fetch/lib/index.js:130:14)
+23 verbose stack     at ClientRequest.emit (node:events:507:28)
+23 verbose stack     at emitErrorEvent (node:_http_client:104:11)
+23 verbose stack     at _destroy (node:_http_client:898:9)
+23 verbose stack     at onSocketNT (node:_http_client:918:5)
+23 verbose stack     at process.processTicksAndRejections (node:internal/process/task_queues:91:21)
+24 error code ENOTFOUND
+25 error syscall getaddrinfo
+26 error errno ENOTFOUND
+27 error network request to https://registry.npmjs.org/@tailwindcss/oxide-wasm32-wasi/-/oxide-wasm32-wasi-4.1.12.tgz failed, reason: getaddrinfo ENOTFOUND registry.npmjs.org
+28 error network This is a problem related to network connectivity.
+28 error network In most cases you are behind a proxy or have bad network settings.
+28 error network
+28 error network If you are behind a proxy, please make sure that the
+28 error network 'proxy' config is set properly.  See: 'npm help config'
+29 silly unfinished npm timer reify 1776610137993
+30 silly unfinished npm timer reify:loadTrees 1776610137993
+31 silly unfinished npm timer idealTree:buildDeps 1776610138041
+32 silly unfinished npm timer idealTree:node_modules/@tailwindcss/oxide-wasm32-wasi 1776610138048
+33 verbose cwd /Users/fujirio75/dev/w3software
+34 verbose os Darwin 25.4.0
+35 verbose node v23.10.0
+36 verbose npm  v11.6.2
+37 verbose exit 1
+38 verbose code 1
+39 error A complete log of this run can be found in: /Users/fujirio75/dev/w3software/.npm-cache/_logs/2026-04-19T14_48_57_893Z-debug-0.log
