@@ -7,7 +7,7 @@ import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 
-const ENABLE_MODEL_INTERACTION = false;
+const ENABLE_MODEL_INTERACTION = true;
 const PLUSH_SHADER_KEY = 'w3-plush-soft-v1';
 const FUR_STRANDS_PER_MESH = 240000;
 const FUR_LENGTH_RATIO = 0.022;
@@ -27,7 +27,36 @@ type LightTextureMask = {
 
 interface ModelViewerProps {
   modelUrl?: string;
+  softwareLogoUrl?: string;
+  w3LogoUrl?: string;
 }
+
+type FloatingNodeAnimation = {
+  basePosition: THREE.Vector3;
+  currentPosition: THREE.Vector3;
+  endpointDot: THREE.Mesh;
+  labelOffset: THREE.Vector3;
+  phase: number;
+  sprite: THREE.Sprite;
+};
+
+type FloatingConnectionAnimation = {
+  from: FloatingNodeAnimation;
+  line: THREE.Line;
+  to: FloatingNodeAnimation;
+};
+
+type FloatingSpriteAnimation = {
+  basePosition: THREE.Vector3;
+  phase: number;
+  sprite: THREE.Sprite;
+};
+
+type NodeSpaceAnimations = {
+  connections: FloatingConnectionAnimation[];
+  nodes: FloatingNodeAnimation[];
+  sprites: FloatingSpriteAnimation[];
+};
 
 function tunePlushMaterial(material: THREE.MeshStandardMaterial, envMap: THREE.Texture | null) {
   if (material.map) {
@@ -497,7 +526,238 @@ function addSurfaceFur(mesh: THREE.Mesh, lightTextureMask: LightTextureMask | nu
   mesh.add(fur);
 }
 
-export function ModelViewer({ modelUrl }: ModelViewerProps) {
+const NODE_WHITE = 0xf4f4f2;
+const EIGHT_BALL_SIZE = 2.9;
+
+const SKILL_NODES = [
+  { label: 'Unity', position: new THREE.Vector3(-4.15, 2.55, -1.2), phase: 0.2 },
+  { label: 'C#', position: new THREE.Vector3(-3.35, 2.02, 0.9), phase: 1.1 },
+  { label: 'TypeScript', position: new THREE.Vector3(-2.72, 1.5, -1.5), phase: 2.3 },
+  { label: 'React', position: new THREE.Vector3(-2.05, 0.98, 1.35), phase: 3.2 },
+  { label: 'Git', position: new THREE.Vector3(-1.72, 0.38, -1.7), phase: 4.4 },
+  { label: 'Three.js', position: new THREE.Vector3(1.68, -0.05, 1.6), phase: 0.8 },
+  { label: 'WebGL', position: new THREE.Vector3(1.92, -0.92, -1.3), phase: 1.7 },
+  { label: 'Shader Graph', position: new THREE.Vector3(2.35, -1.2, 1.4), phase: 2.8 },
+  { label: 'URP', position: new THREE.Vector3(3.08, -1.85, -0.95), phase: 3.8 },
+  { label: 'Addressables', position: new THREE.Vector3(4, -2.45, 1.15), phase: 5.1 }
+];
+
+function createTextSprite(text: string, height = 0.27) {
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  if (!context) return new THREE.Sprite(new THREE.SpriteMaterial({ color: NODE_WHITE }));
+
+  const canvasHeight = 180;
+  let fontSize = 92;
+  context.font = `500 ${fontSize}px "Sofia Pro", Arial, sans-serif`;
+  while (context.measureText(text).width > 820 && fontSize > 54) {
+    fontSize -= 4;
+    context.font = `500 ${fontSize}px "Sofia Pro", Arial, sans-serif`;
+  }
+
+  const textWidth = Math.ceil(context.measureText(text).width);
+  canvas.width = Math.max(220, textWidth + 72);
+  canvas.height = canvasHeight;
+  const drawingContext = canvas.getContext('2d');
+  if (!drawingContext) return new THREE.Sprite(new THREE.SpriteMaterial({ color: NODE_WHITE }));
+
+  drawingContext.clearRect(0, 0, canvas.width, canvas.height);
+  drawingContext.fillStyle = '#f7f7f4';
+  drawingContext.font = `500 ${fontSize}px "Sofia Pro", Arial, sans-serif`;
+  drawingContext.textAlign = 'center';
+  drawingContext.textBaseline = 'middle';
+  drawingContext.fillText(text, canvas.width / 2, canvas.height / 2 + 2);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    color: 0xffffff,
+    depthWrite: false,
+    transparent: true
+  });
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(height * (canvas.width / canvas.height), height, 1);
+  return sprite;
+}
+
+async function createWhiteSvgSprite(url: string, height: number) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Failed to load SVG: ${url}`);
+
+  const source = await response.text();
+  const viewBox = source.match(/viewBox="([^"]+)"/i)?.[1].split(/\s+/).map(Number);
+  const aspect = viewBox && viewBox.length === 4 && viewBox[3] > 0
+    ? viewBox[2] / viewBox[3]
+    : 3;
+  const whiteSource = source
+    .replace(/#FF5656/gi, '#FFFFFF')
+    .replace(/rgb\(255\s+86\s+86[^)]*\)/gi, '#FFFFFF');
+  const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(whiteSource)}`;
+  const texture = await new Promise<THREE.Texture>((resolve, reject) => {
+    new THREE.TextureLoader().load(dataUrl, resolve, undefined, reject);
+  });
+
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: texture,
+    color: 0xffffff,
+    depthWrite: false,
+    transparent: true
+  }));
+  sprite.scale.set(height * aspect, height, 1);
+  return sprite;
+}
+
+function createSkillNode(
+  root: THREE.Group,
+  label: string,
+  position: THREE.Vector3,
+  phase: number,
+  index: number
+) {
+  const dotGeometry = new THREE.SphereGeometry(0.035, 10, 10);
+  const dotMaterial = new THREE.MeshBasicMaterial({ color: NODE_WHITE });
+  const endpointDot = new THREE.Mesh(dotGeometry, dotMaterial);
+  endpointDot.position.copy(position);
+
+  const sprite = createTextSprite(label);
+  const labelOffset = new THREE.Vector3(0, index % 2 === 0 ? 0.25 : -0.25, 0.04);
+  sprite.position.copy(position).add(labelOffset);
+
+  root.add(endpointDot, sprite);
+  return {
+    basePosition: position.clone(),
+    currentPosition: position.clone(),
+    endpointDot,
+    labelOffset,
+    phase,
+    sprite
+  } satisfies FloatingNodeAnimation;
+}
+
+function createSkillConnection(
+  root: THREE.Group,
+  from: FloatingNodeAnimation,
+  to: FloatingNodeAnimation
+) {
+  const geometry = new THREE.BufferGeometry().setFromPoints([
+    from.currentPosition,
+    to.currentPosition
+  ]);
+  const line = new THREE.Line(
+    geometry,
+    new THREE.LineBasicMaterial({
+      color: NODE_WHITE,
+      depthWrite: false,
+      opacity: 0.5,
+      transparent: true
+    })
+  );
+  line.frustumCulled = false;
+  root.add(line);
+  return { from, line, to } satisfies FloatingConnectionAnimation;
+}
+
+async function addEightBallNodeSpace(
+  root: THREE.Group,
+  softwareLogoUrl?: string,
+  w3LogoUrl?: string
+) {
+  const animations: NodeSpaceAnimations = { connections: [], nodes: [], sprites: [] };
+
+  SKILL_NODES.forEach(({ label, position, phase }, index) => {
+    animations.nodes.push(createSkillNode(root, label, position, phase, index));
+  });
+  for (let index = 0; index < animations.nodes.length - 1; index++) {
+    animations.connections.push(createSkillConnection(
+      root,
+      animations.nodes[index],
+      animations.nodes[index + 1]
+    ));
+  }
+
+  const brandDefinitions = [
+    {
+      fallback: 'W3',
+      height: 0.9,
+      phase: 1.4,
+      position: new THREE.Vector3(-2.15, -2.12, 0.82),
+      url: w3LogoUrl
+    },
+    {
+      fallback: 'Software',
+      height: 0.72,
+      phase: 4.1,
+      position: new THREE.Vector3(2.02, 2.1, 0.64),
+      url: softwareLogoUrl
+    }
+  ];
+
+  for (const definition of brandDefinitions) {
+    let sprite: THREE.Sprite;
+    try {
+      sprite = definition.url
+        ? await createWhiteSvgSprite(definition.url, definition.height)
+        : createTextSprite(definition.fallback, definition.height);
+    } catch (error) {
+      console.warn('SVG node label fell back to canvas text:', error);
+      sprite = createTextSprite(definition.fallback, definition.height);
+    }
+    sprite.position.copy(definition.position);
+    sprite.renderOrder = 3;
+    root.add(sprite);
+    animations.sprites.push({
+      basePosition: definition.position.clone(),
+      phase: definition.phase,
+      sprite
+    });
+  }
+
+  return animations;
+}
+
+function updateNodeSpaceFraming(
+  camera: THREE.PerspectiveCamera,
+  width: number,
+  height: number,
+  model: THREE.Group | null
+) {
+  if (!model?.userData.isNodeSpace) return;
+
+  const aspect = width / Math.max(height, 1);
+  const isMobile = aspect < 0.65;
+  const isPortrait = aspect < 0.95;
+  const distance = isMobile ? 18.5 : isPortrait ? 11.4 : 8.7;
+  const scale = isMobile ? 0.68 : isPortrait ? 0.9 : 1;
+  camera.position.set(0, 0, distance);
+  camera.lookAt(0, 0, 0);
+  model.scale.setScalar(scale);
+}
+
+function disposeObject3D(root: THREE.Object3D) {
+  root.traverse((child) => {
+    const renderable = child as THREE.Object3D & {
+      geometry?: THREE.BufferGeometry;
+      material?: THREE.Material | THREE.Material[];
+    };
+    renderable.geometry?.dispose();
+    const materials = renderable.material
+      ? Array.isArray(renderable.material) ? renderable.material : [renderable.material]
+      : [];
+    materials.forEach((material) => {
+      const mappedMaterial = material as THREE.Material & { map?: THREE.Texture | null };
+      mappedMaterial.map?.dispose();
+      material.dispose();
+    });
+  });
+}
+
+export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
@@ -505,6 +765,7 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
   const blinkMeshesRef = useRef<THREE.Mesh[]>([]);
   const armBonesRef = useRef<{ left: THREE.Bone | null; right: THREE.Bone | null }>({ left: null, right: null });
   const envMapRef = useRef<THREE.Texture | null>(null);
+  const nodeSpaceAnimationsRef = useRef<NodeSpaceAnimations>({ connections: [], nodes: [], sprites: [] });
   const sceneRef = useRef<{
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
@@ -527,8 +788,8 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
       0.1,
       1000
     );
-    camera.position.set(0, 0.55, 6.2);
-    camera.lookAt(0, 0.12, 0);
+    camera.position.set(0, 0, 8.7);
+    camera.lookAt(0, 0, 0);
 
     // レンダラーの設定
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -598,38 +859,44 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       renderer.setSize(width, height);
+      updateNodeSpaceFraming(camera, width, height, sceneRef.current.model);
     };
     window.addEventListener('resize', handleResize);
 
-    // マウスコントロール
-    let previousMousePosition = { x: 0, y: 0 };
-    let rotation = { x: 0.05, y: -0.1 };
-    let autoRotate = true;
+    // 空間全体を回すポインターコントロール
+    let previousPointerPosition = { x: 0, y: 0 };
+    const rotation = { x: 0, y: 0 };
+    const rotationVelocity = { x: 0, y: 0 };
 
-    const handleMouseDown = (e: MouseEvent) => {
+    const handlePointerDown = (event: PointerEvent) => {
+      event.preventDefault();
       isDraggingRef.current = true;
-      autoRotate = false;
-      previousMousePosition = { x: e.clientX, y: e.clientY };
+      renderer.domElement.setPointerCapture(event.pointerId);
+      previousPointerPosition = { x: event.clientX, y: event.clientY };
     };
 
-    const handleMouseMove = (e: MouseEvent) => {
+    const handlePointerMove = (event: PointerEvent) => {
       if (!isDraggingRef.current || !sceneRef.current?.model) return;
-      
-      const deltaX = e.clientX - previousMousePosition.x;
-      const deltaY = e.clientY - previousMousePosition.y;
-      
-      rotation.y += deltaX * 0.005;
-      rotation.x += deltaY * 0.005;
-      rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, rotation.x));
-      
+
+      const deltaX = event.clientX - previousPointerPosition.x;
+      const deltaY = event.clientY - previousPointerPosition.y;
+      rotationVelocity.y = deltaX * 0.00045;
+      rotationVelocity.x = deltaY * 0.00036;
+      rotation.y += deltaX * 0.0055;
+      rotation.x += deltaY * 0.0045;
+      rotation.x = Math.max(-1.18, Math.min(1.18, rotation.x));
+
       sceneRef.current.model.rotation.y = rotation.y;
       sceneRef.current.model.rotation.x = rotation.x;
-      
-      previousMousePosition = { x: e.clientX, y: e.clientY };
+
+      previousPointerPosition = { x: event.clientX, y: event.clientY };
     };
 
-    const handleMouseUp = () => {
+    const handlePointerUp = (event: PointerEvent) => {
       isDraggingRef.current = false;
+      if (renderer.domElement.hasPointerCapture(event.pointerId)) {
+        renderer.domElement.releasePointerCapture(event.pointerId);
+      }
     };
 
     const handleWheel = (e: WheelEvent) => {
@@ -640,10 +907,11 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
     };
 
     if (ENABLE_MODEL_INTERACTION) {
-      renderer.domElement.addEventListener('mousedown', handleMouseDown);
-      renderer.domElement.addEventListener('mousemove', handleMouseMove);
-      renderer.domElement.addEventListener('mouseup', handleMouseUp);
-      renderer.domElement.addEventListener('mouseleave', handleMouseUp);
+      renderer.domElement.style.touchAction = 'none';
+      renderer.domElement.addEventListener('pointerdown', handlePointerDown);
+      renderer.domElement.addEventListener('pointermove', handlePointerMove);
+      renderer.domElement.addEventListener('pointerup', handlePointerUp);
+      renderer.domElement.addEventListener('pointercancel', handlePointerUp);
       renderer.domElement.addEventListener('wheel', handleWheel, { passive: false });
     }
 
@@ -671,8 +939,44 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
           floatBaseY = model.position.y;
           floatBaseYSet = true;
         }
-        model.position.y = floatBaseY + Math.sin(time * 1.1) * 0.07;
+        model.position.y = floatBaseY + Math.sin(time * 0.72) * 0.045;
+
+        if (!isDraggingRef.current) {
+          rotation.y += rotationVelocity.y;
+          rotation.x = Math.max(-1.18, Math.min(1.18, rotation.x + rotationVelocity.x));
+          model.rotation.set(rotation.x, rotation.y, 0);
+          rotationVelocity.x *= 0.94;
+          rotationVelocity.y *= 0.94;
+        }
       }
+
+      nodeSpaceAnimationsRef.current.nodes.forEach((node) => {
+        const floatY = Math.sin(time * 0.7 + node.phase) * 0.075;
+        const floatX = Math.cos(time * 0.46 + node.phase) * 0.018;
+        const floatZ = Math.sin(time * 0.34 + node.phase * 1.3) * 0.045;
+        node.currentPosition.set(
+          node.basePosition.x + floatX,
+          node.basePosition.y + floatY,
+          node.basePosition.z + floatZ
+        );
+        node.endpointDot.position.copy(node.currentPosition);
+        node.sprite.position.copy(node.currentPosition).add(node.labelOffset);
+      });
+
+      nodeSpaceAnimationsRef.current.connections.forEach(({ from, line, to }) => {
+        const position = line.geometry.getAttribute('position');
+        position.setXYZ(0, from.currentPosition.x, from.currentPosition.y, from.currentPosition.z);
+        position.setXYZ(1, to.currentPosition.x, to.currentPosition.y, to.currentPosition.z);
+        position.needsUpdate = true;
+      });
+
+      nodeSpaceAnimationsRef.current.sprites.forEach((item) => {
+        item.sprite.position.set(
+          item.basePosition.x + Math.cos(time * 0.38 + item.phase) * 0.025,
+          item.basePosition.y + Math.sin(time * 0.55 + item.phase) * 0.065,
+          item.basePosition.z
+        );
+      });
 
       // 腕のふわふわアニメーション（胴体に寄せた状態 + ゆらゆら）
       if (armBonesRef.current.left) {
@@ -746,12 +1050,13 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
       if (sceneRef.current) {
         cancelAnimationFrame(sceneRef.current.animationId);
         if (ENABLE_MODEL_INTERACTION) {
-          renderer.domElement.removeEventListener('mousedown', handleMouseDown);
-          renderer.domElement.removeEventListener('mousemove', handleMouseMove);
-          renderer.domElement.removeEventListener('mouseup', handleMouseUp);
-          renderer.domElement.removeEventListener('mouseleave', handleMouseUp);
+          renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
+          renderer.domElement.removeEventListener('pointermove', handlePointerMove);
+          renderer.domElement.removeEventListener('pointerup', handlePointerUp);
+          renderer.domElement.removeEventListener('pointercancel', handlePointerUp);
           renderer.domElement.removeEventListener('wheel', handleWheel);
         }
+        if (sceneRef.current.model) disposeObject3D(sceneRef.current.model);
         renderer.dispose();
         envMapRef.current?.dispose();
         envMapRef.current = null;
@@ -766,22 +1071,17 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
     if (!sceneRef.current || !modelUrl) return;
 
     const { scene } = sceneRef.current;
+    const isEightBall = /eight-ball\.glb(?:[?#]|$)/i.test(modelUrl);
+    const usesPlushCatStyling = !isEightBall;
+    let cancelled = false;
 
     // 既存のモデルを削除
     if (sceneRef.current.model) {
       scene.remove(sceneRef.current.model);
-      sceneRef.current.model.traverse((child) => {
-        if (child instanceof THREE.Mesh || child instanceof THREE.LineSegments) {
-          child.geometry.dispose();
-          if (Array.isArray(child.material)) {
-            child.material.forEach(material => material.dispose());
-          } else {
-            child.material.dispose();
-          }
-        }
-      });
+      disposeObject3D(sceneRef.current.model);
       sceneRef.current.model = null;
     }
+    nodeSpaceAnimationsRef.current = { connections: [], nodes: [], sprites: [] };
 
     // まばたきメッシュ・腕ボーン参照をリセット
     blinkMeshesRef.current = [];
@@ -794,8 +1094,8 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
     const loader = new GLTFLoader();
     loader.load(
       modelUrl,
-      (gltf) => {
-        if (!sceneRef.current) return;
+      async (gltf) => {
+        if (!sceneRef.current || cancelled) return;
 
         const object = gltf.scene;
 
@@ -803,13 +1103,13 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
         const box = new THREE.Box3().setFromObject(object);
         const size = box.getSize(new THREE.Vector3());
         const maxDim = Math.max(size.x, size.y, size.z);
-        const scale = 3.7 / maxDim;
+        const scale = (isEightBall ? EIGHT_BALL_SIZE : 3.7) / maxDim;
         object.scale.setScalar(scale);
 
         // モデルを中央に配置
         const center = box.getCenter(new THREE.Vector3());
         object.position.x = -center.x * scale;
-        object.position.y = -center.y * scale - 0.35;
+        object.position.y = -center.y * scale + (isEightBall ? 0 : -0.35);
         object.position.z = -center.z * scale;
 
         // デバッグ: 全オブジェクト名と型を表示
@@ -817,19 +1117,21 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
           console.log(`[${child.type}] "${child.name}"`);
         });
 
-        // ボーンの検出（腕）
-        object.traverse((child) => {
-          if (child instanceof THREE.Bone) {
-            if (child.name === 'Bone002') {
-              armBonesRef.current.left = child;
-              console.log('Left arm bone found:', child.name);
+        if (usesPlushCatStyling) {
+          // ボーンの検出（腕）
+          object.traverse((child) => {
+            if (child instanceof THREE.Bone) {
+              if (child.name === 'Bone002') {
+                armBonesRef.current.left = child;
+                console.log('Left arm bone found:', child.name);
+              }
+              if (child.name === 'Bone004') {
+                armBonesRef.current.right = child;
+                console.log('Right arm bone found:', child.name);
+              }
             }
-            if (child.name === 'Bone004') {
-              armBonesRef.current.right = child;
-              console.log('Right arm bone found:', child.name);
-            }
-          }
-        });
+          });
+        }
 
         const meshes: THREE.Mesh[] = [];
 
@@ -840,47 +1142,76 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
             child.castShadow = true;
             child.receiveShadow = true;
 
-            // デバッグ: 全メッシュのモーフターゲットを表示
-            if (child.morphTargetDictionary) {
-              console.log(`Mesh "${child.name}" morph targets:`, Object.keys(child.morphTargetDictionary));
-            }
+            if (usesPlushCatStyling) {
+              // デバッグ: 全メッシュのモーフターゲットを表示
+              if (child.morphTargetDictionary) {
+                console.log(`Mesh "${child.name}" morph targets:`, Object.keys(child.morphTargetDictionary));
+              }
 
-            // モーフターゲット「Blink」を持つメッシュを検出
-            if (child.morphTargetDictionary && 'Blink' in child.morphTargetDictionary) {
-              blinkMeshesRef.current.push(child);
-              console.log('Blink morph target found on:', child.name);
+              // モーフターゲット「Blink」を持つメッシュを検出
+              if (child.morphTargetDictionary && 'Blink' in child.morphTargetDictionary) {
+                blinkMeshesRef.current.push(child);
+                console.log('Blink morph target found on:', child.name);
+              }
             }
           }
         });
 
-        meshes.forEach((mesh) => {
-          const originalGeometry = mesh.geometry;
-          mesh.geometry = smoothPlushGeometry(originalGeometry);
-          originalGeometry.dispose();
-          pushEarsBack(mesh.geometry);
+        if (usesPlushCatStyling) {
+          meshes.forEach((mesh) => {
+            const originalGeometry = mesh.geometry;
+            mesh.geometry = smoothPlushGeometry(originalGeometry);
+            originalGeometry.dispose();
+            pushEarsBack(mesh.geometry);
 
-          const normalAttribute = mesh.geometry.getAttribute('normal');
-          if (normalAttribute) normalAttribute.needsUpdate = true;
+            const normalAttribute = mesh.geometry.getAttribute('normal');
+            if (normalAttribute) normalAttribute.needsUpdate = true;
 
-          const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-          materials.forEach((material) => {
-            if (material instanceof THREE.MeshStandardMaterial) {
-              tunePlushMaterial(material, envMapRef.current);
+            const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            materials.forEach((material) => {
+              if (material instanceof THREE.MeshStandardMaterial) {
+                tunePlushMaterial(material, envMapRef.current);
+              }
+            });
+
+            if (mesh.geometry.getAttribute('position')) {
+              addSurfaceFur(mesh, createLightTextureMask(materials));
             }
           });
-
-          if (mesh.geometry.getAttribute('position')) {
-            addSurfaceFur(mesh, createLightTextureMask(materials));
-          }
-        });
+        }
 
         // 初期回転を適用（デザインに合わせた傾き）
         object.rotation.x = -0.04;
         object.rotation.y = 0.02;
         object.rotation.z = 0;
 
-        scene.add(object);
-        sceneRef.current.model = object;
+        if (isEightBall) {
+          const nodeSpace = new THREE.Group();
+          nodeSpace.name = 'eight_ball_node_space';
+          nodeSpace.userData.isNodeSpace = true;
+          nodeSpace.add(object);
+          const animations = await addEightBallNodeSpace(nodeSpace, softwareLogoUrl, w3LogoUrl);
+
+          if (!sceneRef.current || cancelled) {
+            disposeObject3D(nodeSpace);
+            return;
+          }
+
+          nodeSpaceAnimationsRef.current = animations;
+          scene.add(nodeSpace);
+          sceneRef.current.model = nodeSpace;
+          if (containerRef.current) {
+            updateNodeSpaceFraming(
+              sceneRef.current.camera,
+              containerRef.current.clientWidth,
+              containerRef.current.clientHeight,
+              nodeSpace
+            );
+          }
+        } else {
+          scene.add(object);
+          sceneRef.current.model = object;
+        }
         setIsLoading(false);
 
         console.log('Model loaded. Blink meshes found:', blinkMeshesRef.current.length);
@@ -896,7 +1227,11 @@ export function ModelViewer({ modelUrl }: ModelViewerProps) {
         setIsLoading(false);
       }
     );
-  }, [modelUrl]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [modelUrl, softwareLogoUrl, w3LogoUrl]);
 
   return (
     <div className="relative w-full h-full">
