@@ -34,27 +34,39 @@ interface ModelViewerProps {
 type FloatingNodeAnimation = {
   basePosition: THREE.Vector3;
   currentPosition: THREE.Vector3;
+  drift: THREE.Vector3;
   endpointDot: THREE.Mesh;
+  glow: THREE.Sprite;
+  index: number;
   labelOffset: THREE.Vector3;
   phase: number;
   sprite: THREE.Sprite;
+  spriteBaseScale: THREE.Vector3;
 };
 
-type FloatingConnectionAnimation = {
-  from: FloatingNodeAnimation;
+type PathPulseAnimation = {
+  mesh: THREE.Mesh;
+  phase: number;
+  speed: number;
+};
+
+type FloatingPathAnimation = {
+  glowLine: THREE.Line;
   line: THREE.Line;
-  to: FloatingNodeAnimation;
+  pulses: PathPulseAnimation[];
 };
 
 type FloatingSpriteAnimation = {
   basePosition: THREE.Vector3;
+  baseScale: THREE.Vector3;
   phase: number;
   sprite: THREE.Sprite;
 };
 
 type NodeSpaceAnimations = {
-  connections: FloatingConnectionAnimation[];
+  field: THREE.Points | null;
   nodes: FloatingNodeAnimation[];
+  path: FloatingPathAnimation | null;
   sprites: FloatingSpriteAnimation[];
 };
 
@@ -530,17 +542,155 @@ const NODE_WHITE = 0xf4f4f2;
 const EIGHT_BALL_SIZE = 2.9;
 
 const SKILL_NODES = [
-  { label: 'Unity', position: new THREE.Vector3(-4.15, 2.55, -1.2), phase: 0.2 },
-  { label: 'C#', position: new THREE.Vector3(-3.35, 2.02, 0.9), phase: 1.1 },
-  { label: 'TypeScript', position: new THREE.Vector3(-2.72, 1.5, -1.5), phase: 2.3 },
-  { label: 'React', position: new THREE.Vector3(-2.05, 0.98, 1.35), phase: 3.2 },
-  { label: 'Git', position: new THREE.Vector3(-1.72, 0.38, -1.7), phase: 4.4 },
-  { label: 'Three.js', position: new THREE.Vector3(1.68, -0.05, 1.6), phase: 0.8 },
-  { label: 'WebGL', position: new THREE.Vector3(1.92, -0.92, -1.3), phase: 1.7 },
-  { label: 'Shader Graph', position: new THREE.Vector3(2.35, -1.2, 1.4), phase: 2.8 },
-  { label: 'URP', position: new THREE.Vector3(3.08, -1.85, -0.95), phase: 3.8 },
-  { label: 'Addressables', position: new THREE.Vector3(4, -2.45, 1.15), phase: 5.1 }
+  {
+    drift: new THREE.Vector3(0.06, 0.12, 0.2),
+    label: 'Unity',
+    labelOffset: new THREE.Vector3(-0.18, 0.34, 0.04),
+    phase: 0.2,
+    position: new THREE.Vector3(-3.7, 2.15, 1.15),
+    size: 0.34
+  },
+  {
+    drift: new THREE.Vector3(0.1, 0.16, 0.14),
+    label: 'C#',
+    labelOffset: new THREE.Vector3(0.16, 0.3, 0.04),
+    phase: 1.1,
+    position: new THREE.Vector3(3.4, 1.55, -1.5),
+    size: 0.27
+  },
+  {
+    drift: new THREE.Vector3(0.14, 0.09, 0.22),
+    label: 'TypeScript',
+    labelOffset: new THREE.Vector3(-0.12, 0.34, 0.04),
+    phase: 2.3,
+    position: new THREE.Vector3(-2.25, 1.05, -2.65),
+    size: 0.3
+  },
+  {
+    drift: new THREE.Vector3(0.08, 0.18, 0.16),
+    label: 'React',
+    labelOffset: new THREE.Vector3(0.18, 0.3, 0.04),
+    phase: 3.2,
+    position: new THREE.Vector3(3.65, 0.55, 1.65),
+    size: 0.28
+  },
+  {
+    drift: new THREE.Vector3(0.16, 0.12, 0.24),
+    label: 'Git',
+    labelOffset: new THREE.Vector3(-0.2, -0.3, 0.04),
+    phase: 4.4,
+    position: new THREE.Vector3(-3.4, -0.45, 2.1),
+    size: 0.25
+  },
+  {
+    drift: new THREE.Vector3(0.09, 0.15, 0.18),
+    label: 'Three.js',
+    labelOffset: new THREE.Vector3(0.2, 0.32, 0.04),
+    phase: 0.8,
+    position: new THREE.Vector3(2.2, -0.72, -2.9),
+    size: 0.32
+  },
+  {
+    drift: new THREE.Vector3(0.15, 0.1, 0.25),
+    label: 'WebGL',
+    labelOffset: new THREE.Vector3(0.3, 0.34, 0.04),
+    phase: 1.7,
+    position: new THREE.Vector3(-0.75, -1.88, 2.5),
+    size: 0.27
+  },
+  {
+    drift: new THREE.Vector3(0.11, 0.17, 0.16),
+    label: 'Shader Graph',
+    labelOffset: new THREE.Vector3(0.2, -0.32, 0.04),
+    phase: 2.8,
+    position: new THREE.Vector3(3.2, -2, -0.45),
+    size: 0.29
+  },
+  {
+    drift: new THREE.Vector3(0.13, 0.11, 0.21),
+    label: 'URP',
+    labelOffset: new THREE.Vector3(-0.2, 0.32, 0.04),
+    phase: 3.8,
+    position: new THREE.Vector3(-3.6, -1.7, -1.6),
+    size: 0.25
+  },
+  {
+    drift: new THREE.Vector3(0.08, 0.19, 0.17),
+    label: 'Addressables',
+    labelOffset: new THREE.Vector3(-0.18, 0.3, 0.04),
+    phase: 5.1,
+    position: new THREE.Vector3(-1, 2, 2.25),
+    size: 0.29
+  }
 ];
+
+function createGlowTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const context = canvas.getContext('2d');
+  if (!context) return new THREE.Texture();
+
+  const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 62);
+  gradient.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+  gradient.addColorStop(0.16, 'rgba(255, 255, 255, 0.42)');
+  gradient.addColorStop(0.48, 'rgba(255, 255, 255, 0.1)');
+  gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 128, 128);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  return texture;
+}
+
+function createAmbientField(root: THREE.Group) {
+  const count = 140;
+  const positions = new Float32Array(count * 3);
+  const colors = new Float32Array(count * 3);
+  const random = seededRandom(8317);
+
+  for (let index = 0; index < count; index++) {
+    let x = 0;
+    let y = 0;
+    let z = 0;
+    do {
+      x = (random() - 0.5) * 10.8;
+      y = (random() - 0.5) * 6.8;
+      z = (random() - 0.5) * 7.2;
+    } while (x * x + y * y < 3.4);
+
+    const offset = index * 3;
+    positions[offset] = x;
+    positions[offset + 1] = y;
+    positions[offset + 2] = z;
+    const brightness = 0.2 + random() * 0.38;
+    colors[offset] = brightness * 0.86;
+    colors[offset + 1] = brightness * 0.91;
+    colors[offset + 2] = brightness;
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const points = new THREE.Points(
+    geometry,
+    new THREE.PointsMaterial({
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      opacity: 0.3,
+      size: 0.018,
+      sizeAttenuation: true,
+      transparent: true,
+      vertexColors: true
+    })
+  );
+  points.renderOrder = -1;
+  root.add(points);
+  return points;
+}
 
 function createTextSprite(text: string, height = 0.27) {
   const canvas = document.createElement('canvas');
@@ -615,52 +765,103 @@ async function createWhiteSvgSprite(url: string, height: number) {
 
 function createSkillNode(
   root: THREE.Group,
-  label: string,
-  position: THREE.Vector3,
-  phase: number,
-  index: number
+  definition: (typeof SKILL_NODES)[number],
+  glowTexture: THREE.Texture,
+  index: number,
 ) {
-  const dotGeometry = new THREE.SphereGeometry(0.035, 10, 10);
-  const dotMaterial = new THREE.MeshBasicMaterial({ color: NODE_WHITE });
+  const { drift, label, labelOffset, phase, position, size } = definition;
+  const dotGeometry = new THREE.SphereGeometry(index % 3 === 0 ? 0.045 : 0.034, 12, 12);
+  const dotMaterial = new THREE.MeshBasicMaterial({
+    color: NODE_WHITE,
+    opacity: 0.88,
+    transparent: true
+  });
   const endpointDot = new THREE.Mesh(dotGeometry, dotMaterial);
   endpointDot.position.copy(position);
 
-  const sprite = createTextSprite(label);
-  const labelOffset = new THREE.Vector3(0, index % 2 === 0 ? 0.25 : -0.25, 0.04);
-  sprite.position.copy(position).add(labelOffset);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    blending: THREE.AdditiveBlending,
+    color: 0xffffff,
+    depthWrite: false,
+    map: glowTexture,
+    opacity: 0.16,
+    transparent: true
+  }));
+  const glowSize = index % 3 === 0 ? 0.32 : 0.24;
+  glow.position.copy(position);
+  glow.scale.set(glowSize, glowSize, 1);
 
-  root.add(endpointDot, sprite);
+  const sprite = createTextSprite(label, size);
+  sprite.position.copy(position).add(labelOffset);
+  const spriteBaseScale = sprite.scale.clone();
+
+  root.add(glow, endpointDot, sprite);
   return {
     basePosition: position.clone(),
     currentPosition: position.clone(),
+    drift: drift.clone(),
     endpointDot,
-    labelOffset,
+    glow,
+    index,
+    labelOffset: labelOffset.clone(),
     phase,
-    sprite
+    sprite,
+    spriteBaseScale
   } satisfies FloatingNodeAnimation;
 }
 
-function createSkillConnection(
+function createSkillPath(
   root: THREE.Group,
-  from: FloatingNodeAnimation,
-  to: FloatingNodeAnimation
+  nodes: FloatingNodeAnimation[]
 ) {
-  const geometry = new THREE.BufferGeometry().setFromPoints([
-    from.currentPosition,
-    to.currentPosition
-  ]);
+  const geometry = new THREE.BufferGeometry().setFromPoints(
+    nodes.map((node) => node.currentPosition)
+  );
   const line = new THREE.Line(
     geometry,
     new THREE.LineBasicMaterial({
       color: NODE_WHITE,
       depthWrite: false,
-      opacity: 0.5,
+      opacity: 0.42,
       transparent: true
     })
   );
   line.frustumCulled = false;
-  root.add(line);
-  return { from, line, to } satisfies FloatingConnectionAnimation;
+
+  const glowLine = new THREE.Line(
+    geometry.clone(),
+    new THREE.LineBasicMaterial({
+      blending: THREE.AdditiveBlending,
+      color: 0xffffff,
+      depthWrite: false,
+      opacity: 0.09,
+      transparent: true
+    })
+  );
+  glowLine.frustumCulled = false;
+
+  const pulses: PathPulseAnimation[] = Array.from({ length: 4 }, (_, index) => {
+    const radius = index === 0 ? 0.047 : 0.026 + index * 0.004;
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(radius, 10, 10),
+      new THREE.MeshBasicMaterial({
+        blending: THREE.AdditiveBlending,
+        color: 0xffffff,
+        depthWrite: false,
+        opacity: 0.68,
+        transparent: true
+      })
+    );
+    root.add(mesh);
+    return {
+      mesh,
+      phase: index * 0.237,
+      speed: 0.018 + index * 0.0045
+    };
+  });
+
+  root.add(glowLine, line);
+  return { glowLine, line, pulses } satisfies FloatingPathAnimation;
 }
 
 async function addEightBallNodeSpace(
@@ -668,18 +869,18 @@ async function addEightBallNodeSpace(
   softwareLogoUrl?: string,
   w3LogoUrl?: string
 ) {
-  const animations: NodeSpaceAnimations = { connections: [], nodes: [], sprites: [] };
+  const animations: NodeSpaceAnimations = {
+    field: createAmbientField(root),
+    nodes: [],
+    path: null,
+    sprites: []
+  };
+  const glowTexture = createGlowTexture();
 
-  SKILL_NODES.forEach(({ label, position, phase }, index) => {
-    animations.nodes.push(createSkillNode(root, label, position, phase, index));
+  SKILL_NODES.forEach((definition, index) => {
+    animations.nodes.push(createSkillNode(root, definition, glowTexture, index));
   });
-  for (let index = 0; index < animations.nodes.length - 1; index++) {
-    animations.connections.push(createSkillConnection(
-      root,
-      animations.nodes[index],
-      animations.nodes[index + 1]
-    ));
-  }
+  animations.path = createSkillPath(root, animations.nodes);
 
   const brandDefinitions = [
     {
@@ -713,6 +914,7 @@ async function addEightBallNodeSpace(
     root.add(sprite);
     animations.sprites.push({
       basePosition: definition.position.clone(),
+      baseScale: sprite.scale.clone(),
       phase: definition.phase,
       sprite
     });
@@ -732,7 +934,7 @@ function updateNodeSpaceFraming(
   const aspect = width / Math.max(height, 1);
   const isMobile = aspect < 0.65;
   const isPortrait = aspect < 0.95;
-  const distance = isMobile ? 18.5 : isPortrait ? 11.4 : 8.7;
+  const distance = isMobile ? 18.5 : isPortrait ? 12.2 : 9.6;
   const scale = isMobile ? 0.68 : isPortrait ? 0.9 : 1;
   camera.position.set(0, 0, distance);
   camera.lookAt(0, 0, 0);
@@ -765,7 +967,7 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
   const blinkMeshesRef = useRef<THREE.Mesh[]>([]);
   const armBonesRef = useRef<{ left: THREE.Bone | null; right: THREE.Bone | null }>({ left: null, right: null });
   const envMapRef = useRef<THREE.Texture | null>(null);
-  const nodeSpaceAnimationsRef = useRef<NodeSpaceAnimations>({ connections: [], nodes: [], sprites: [] });
+  const nodeSpaceAnimationsRef = useRef<NodeSpaceAnimations>({ field: null, nodes: [], path: null, sprites: [] });
   const sceneRef = useRef<{
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
@@ -880,10 +1082,10 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
 
       const deltaX = event.clientX - previousPointerPosition.x;
       const deltaY = event.clientY - previousPointerPosition.y;
-      rotationVelocity.y = deltaX * 0.00045;
-      rotationVelocity.x = deltaY * 0.00036;
-      rotation.y += deltaX * 0.0055;
-      rotation.x += deltaY * 0.0045;
+      rotationVelocity.y = deltaX * 0.00038;
+      rotationVelocity.x = deltaY * 0.0003;
+      rotation.y += deltaX * 0.0042;
+      rotation.x += deltaY * 0.003;
       rotation.x = Math.max(-1.18, Math.min(1.18, rotation.x));
 
       sceneRef.current.model.rotation.y = rotation.y;
@@ -925,6 +1127,8 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
     // 浮遊アニメーション用の基準Y位置
     let floatBaseY = 0;
     let floatBaseYSet = false;
+    const pathPoint = new THREE.Vector3();
+    const worldPoint = new THREE.Vector3();
 
     // アニメーションループ
     const animate = () => {
@@ -942,33 +1146,73 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
         model.position.y = floatBaseY + Math.sin(time * 0.72) * 0.045;
 
         if (!isDraggingRef.current) {
-          rotation.y += rotationVelocity.y;
+          rotation.y += rotationVelocity.y + 0.00016 + Math.sin(time * 0.19) * 0.00005;
           rotation.x = Math.max(-1.18, Math.min(1.18, rotation.x + rotationVelocity.x));
-          model.rotation.set(rotation.x, rotation.y, 0);
-          rotationVelocity.x *= 0.94;
-          rotationVelocity.y *= 0.94;
+          model.rotation.set(
+            rotation.x + Math.sin(time * 0.16) * 0.022,
+            rotation.y + Math.sin(time * 0.11) * 0.035,
+            Math.sin(time * 0.13) * 0.008
+          );
+          rotationVelocity.x *= 0.945;
+          rotationVelocity.y *= 0.945;
         }
       }
 
       nodeSpaceAnimationsRef.current.nodes.forEach((node) => {
-        const floatY = Math.sin(time * 0.7 + node.phase) * 0.075;
-        const floatX = Math.cos(time * 0.46 + node.phase) * 0.018;
-        const floatZ = Math.sin(time * 0.34 + node.phase * 1.3) * 0.045;
+        const floatX =
+          Math.sin(time * (0.17 + node.index * 0.013) + node.phase) * node.drift.x +
+          Math.cos(time * 0.41 + node.phase * 1.7) * node.drift.x * 0.35;
+        const floatY =
+          Math.cos(time * (0.21 + node.index * 0.011) + node.phase) * node.drift.y +
+          Math.sin(time * 0.12 + node.phase * 0.6) * node.drift.y * 0.38;
+        const floatZ =
+          Math.sin(time * (0.14 + node.index * 0.009) + node.phase * 1.25) * node.drift.z +
+          Math.cos(time * 0.33 + node.phase) * node.drift.z * 0.24;
         node.currentPosition.set(
           node.basePosition.x + floatX,
           node.basePosition.y + floatY,
           node.basePosition.z + floatZ
         );
         node.endpointDot.position.copy(node.currentPosition);
+        node.glow.position.copy(node.currentPosition);
         node.sprite.position.copy(node.currentPosition).add(node.labelOffset);
+        const breath = 1 + Math.sin(time * (0.55 + node.index * 0.025) + node.phase) * 0.022;
+        node.sprite.scale.copy(node.spriteBaseScale).multiplyScalar(breath);
+        const glowScale = (node.index % 3 === 0 ? 0.32 : 0.24) * (
+          0.86 + Math.sin(time * 0.72 + node.phase) * 0.14
+        );
+        node.glow.scale.set(glowScale, glowScale, 1);
       });
 
-      nodeSpaceAnimationsRef.current.connections.forEach(({ from, line, to }) => {
-        const position = line.geometry.getAttribute('position');
-        position.setXYZ(0, from.currentPosition.x, from.currentPosition.y, from.currentPosition.z);
-        position.setXYZ(1, to.currentPosition.x, to.currentPosition.y, to.currentPosition.z);
-        position.needsUpdate = true;
-      });
+      const path = nodeSpaceAnimationsRef.current.path;
+      if (path) {
+        const nodes = nodeSpaceAnimationsRef.current.nodes;
+        const linePosition = path.line.geometry.getAttribute('position');
+        const glowPosition = path.glowLine.geometry.getAttribute('position');
+        nodes.forEach((node, index) => {
+          linePosition.setXYZ(index, node.currentPosition.x, node.currentPosition.y, node.currentPosition.z);
+          glowPosition.setXYZ(index, node.currentPosition.x, node.currentPosition.y, node.currentPosition.z);
+        });
+        linePosition.needsUpdate = true;
+        glowPosition.needsUpdate = true;
+
+        path.pulses.forEach((pulse, index) => {
+          const progress = (time * pulse.speed + pulse.phase) % 1;
+          const pathProgress = progress * (nodes.length - 1);
+          const segmentIndex = Math.min(nodes.length - 2, Math.floor(pathProgress));
+          const segmentProgress = pathProgress - segmentIndex;
+          pathPoint.lerpVectors(
+            nodes[segmentIndex].currentPosition,
+            nodes[segmentIndex + 1].currentPosition,
+            segmentProgress
+          );
+          pulse.mesh.position.copy(pathPoint);
+          const pulseScale = 0.72 + Math.pow(Math.sin(progress * Math.PI), 2) * 0.58;
+          pulse.mesh.scale.setScalar(pulseScale);
+          (pulse.mesh.material as THREE.MeshBasicMaterial).opacity =
+            (0.46 + Math.sin(time * 1.4 + index) * 0.16) * Math.sin(progress * Math.PI);
+        });
+      }
 
       nodeSpaceAnimationsRef.current.sprites.forEach((item) => {
         item.sprite.position.set(
@@ -976,7 +1220,29 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
           item.basePosition.y + Math.sin(time * 0.55 + item.phase) * 0.065,
           item.basePosition.z
         );
+        item.sprite.scale.copy(item.baseScale).multiplyScalar(
+          1 + Math.sin(time * 0.31 + item.phase) * 0.012
+        );
       });
+
+      const ambientField = nodeSpaceAnimationsRef.current.field;
+      if (ambientField) {
+        ambientField.rotation.y = time * 0.008;
+        ambientField.rotation.x = Math.sin(time * 0.09) * 0.035;
+        (ambientField.material as THREE.PointsMaterial).opacity =
+          0.24 + Math.sin(time * 0.18) * 0.045;
+      }
+
+      if (model?.userData.isNodeSpace) {
+        model.updateMatrixWorld(true);
+        nodeSpaceAnimationsRef.current.nodes.forEach((node) => {
+          node.sprite.getWorldPosition(worldPoint);
+          const relativeDepth = clamp01(0.5 + (camera.position.z - camera.position.distanceTo(worldPoint)) / 4.8);
+          (node.sprite.material as THREE.SpriteMaterial).opacity = 0.56 + relativeDepth * 0.44;
+          (node.endpointDot.material as THREE.MeshBasicMaterial).opacity = 0.5 + relativeDepth * 0.5;
+          (node.glow.material as THREE.SpriteMaterial).opacity = 0.07 + relativeDepth * 0.17;
+        });
+      }
 
       // 腕のふわふわアニメーション（胴体に寄せた状態 + ゆらゆら）
       if (armBonesRef.current.left) {
@@ -1081,7 +1347,7 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
       disposeObject3D(sceneRef.current.model);
       sceneRef.current.model = null;
     }
-    nodeSpaceAnimationsRef.current = { connections: [], nodes: [], sprites: [] };
+    nodeSpaceAnimationsRef.current = { field: null, nodes: [], path: null, sprites: [] };
 
     // まばたきメッシュ・腕ボーン参照をリセット
     blinkMeshesRef.current = [];
