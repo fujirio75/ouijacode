@@ -194,7 +194,7 @@
 }
 
 .node-space-root {
-  background: #000;
+  background: #fff;
 }
 
 .node-space-root canvas {
@@ -207,5 +207,5 @@
 }
 
 .node-space-vignette {
-  background: radial-gradient(circle at center, transparent 48%, rgb(0 0 0 / 34%) 100%);
+  background: radial-gradient(circle at center, transparent 48%, rgb(217 20 50 / 8%) 100%);
 }

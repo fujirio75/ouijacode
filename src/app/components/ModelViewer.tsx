@@ -538,7 +538,10 @@ function addSurfaceFur(mesh: THREE.Mesh, lightTextureMask: LightTextureMask | nu
   mesh.add(fur);
 }
 
-const NODE_WHITE = 0xf4f4f2;
+const ACCENT_RED = 0xd91432;
+const ACCENT_RED_CSS = '#d91432';
+const AUTO_ROTATION_SPEED = Math.PI / 24;
+const BALL_RED = 0xc8102e;
 const EIGHT_BALL_SIZE = 2.9;
 
 const SKILL_NODES = [
@@ -666,10 +669,10 @@ function createAmbientField(root: THREE.Group) {
     positions[offset] = x;
     positions[offset + 1] = y;
     positions[offset + 2] = z;
-    const brightness = 0.2 + random() * 0.38;
-    colors[offset] = brightness * 0.86;
-    colors[offset + 1] = brightness * 0.91;
-    colors[offset + 2] = brightness;
+    const brightness = 0.32 + random() * 0.5;
+    colors[offset] = brightness;
+    colors[offset + 1] = brightness * 0.06;
+    colors[offset + 2] = brightness * 0.16;
   }
 
   const geometry = new THREE.BufferGeometry();
@@ -678,7 +681,7 @@ function createAmbientField(root: THREE.Group) {
   const points = new THREE.Points(
     geometry,
     new THREE.PointsMaterial({
-      blending: THREE.AdditiveBlending,
+      blending: THREE.NormalBlending,
       depthWrite: false,
       opacity: 0.3,
       size: 0.018,
@@ -695,7 +698,7 @@ function createAmbientField(root: THREE.Group) {
 function createTextSprite(text: string, height = 0.27) {
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d');
-  if (!context) return new THREE.Sprite(new THREE.SpriteMaterial({ color: NODE_WHITE }));
+  if (!context) return new THREE.Sprite(new THREE.SpriteMaterial({ color: ACCENT_RED }));
 
   const canvasHeight = 180;
   let fontSize = 92;
@@ -709,10 +712,10 @@ function createTextSprite(text: string, height = 0.27) {
   canvas.width = Math.max(220, textWidth + 72);
   canvas.height = canvasHeight;
   const drawingContext = canvas.getContext('2d');
-  if (!drawingContext) return new THREE.Sprite(new THREE.SpriteMaterial({ color: NODE_WHITE }));
+  if (!drawingContext) return new THREE.Sprite(new THREE.SpriteMaterial({ color: ACCENT_RED }));
 
   drawingContext.clearRect(0, 0, canvas.width, canvas.height);
-  drawingContext.fillStyle = '#f7f7f4';
+  drawingContext.fillStyle = ACCENT_RED_CSS;
   drawingContext.font = `500 ${fontSize}px "Sofia Pro", Arial, sans-serif`;
   drawingContext.textAlign = 'center';
   drawingContext.textBaseline = 'middle';
@@ -734,7 +737,7 @@ function createTextSprite(text: string, height = 0.27) {
   return sprite;
 }
 
-async function createWhiteSvgSprite(url: string, height: number) {
+async function createAccentSvgSprite(url: string, height: number) {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Failed to load SVG: ${url}`);
 
@@ -743,10 +746,10 @@ async function createWhiteSvgSprite(url: string, height: number) {
   const aspect = viewBox && viewBox.length === 4 && viewBox[3] > 0
     ? viewBox[2] / viewBox[3]
     : 3;
-  const whiteSource = source
-    .replace(/#FF5656/gi, '#FFFFFF')
-    .replace(/rgb\(255\s+86\s+86[^)]*\)/gi, '#FFFFFF');
-  const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(whiteSource)}`;
+  const accentSource = source
+    .replace(/#FF5656/gi, ACCENT_RED_CSS)
+    .replace(/rgb\(255\s+86\s+86[^)]*\)/gi, ACCENT_RED_CSS);
+  const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(accentSource)}`;
   const texture = await new Promise<THREE.Texture>((resolve, reject) => {
     new THREE.TextureLoader().load(dataUrl, resolve, undefined, reject);
   });
@@ -763,6 +766,24 @@ async function createWhiteSvgSprite(url: string, height: number) {
   return sprite;
 }
 
+function tuneEightBallMaterial(mesh: THREE.Mesh) {
+  const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  materials.forEach((material) => {
+    if (
+      material instanceof THREE.MeshStandardMaterial &&
+      /polished phenolic resin\s*-\s*black/i.test(material.name)
+    ) {
+      material.color.set(BALL_RED);
+      material.emissive.set(0x180006);
+      material.emissiveIntensity = 0.1;
+      material.envMapIntensity = 1.05;
+      material.metalness = 0.06;
+      material.roughness = 0.2;
+      material.needsUpdate = true;
+    }
+  });
+}
+
 function createSkillNode(
   root: THREE.Group,
   definition: (typeof SKILL_NODES)[number],
@@ -772,7 +793,7 @@ function createSkillNode(
   const { drift, label, labelOffset, phase, position, size } = definition;
   const dotGeometry = new THREE.SphereGeometry(index % 3 === 0 ? 0.045 : 0.034, 12, 12);
   const dotMaterial = new THREE.MeshBasicMaterial({
-    color: NODE_WHITE,
+    color: ACCENT_RED,
     opacity: 0.88,
     transparent: true
   });
@@ -780,8 +801,8 @@ function createSkillNode(
   endpointDot.position.copy(position);
 
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-    blending: THREE.AdditiveBlending,
-    color: 0xffffff,
+    blending: THREE.NormalBlending,
+    color: ACCENT_RED,
     depthWrite: false,
     map: glowTexture,
     opacity: 0.16,
@@ -820,7 +841,7 @@ function createSkillPath(
   const line = new THREE.Line(
     geometry,
     new THREE.LineBasicMaterial({
-      color: NODE_WHITE,
+      color: ACCENT_RED,
       depthWrite: false,
       opacity: 0.42,
       transparent: true
@@ -831,8 +852,8 @@ function createSkillPath(
   const glowLine = new THREE.Line(
     geometry.clone(),
     new THREE.LineBasicMaterial({
-      blending: THREE.AdditiveBlending,
-      color: 0xffffff,
+      blending: THREE.NormalBlending,
+      color: ACCENT_RED,
       depthWrite: false,
       opacity: 0.09,
       transparent: true
@@ -845,8 +866,8 @@ function createSkillPath(
     const mesh = new THREE.Mesh(
       new THREE.SphereGeometry(radius, 10, 10),
       new THREE.MeshBasicMaterial({
-        blending: THREE.AdditiveBlending,
-        color: 0xffffff,
+        blending: THREE.NormalBlending,
+        color: ACCENT_RED,
         depthWrite: false,
         opacity: 0.68,
         transparent: true
@@ -903,7 +924,7 @@ async function addEightBallNodeSpace(
     let sprite: THREE.Sprite;
     try {
       sprite = definition.url
-        ? await createWhiteSvgSprite(definition.url, definition.height)
+        ? await createAccentSvgSprite(definition.url, definition.height)
         : createTextSprite(definition.fallback, definition.height);
     } catch (error) {
       console.warn('SVG node label fell back to canvas text:', error);
@@ -995,7 +1016,7 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
 
     // レンダラーの設定
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setClearColor(0x000000, 0);
+    renderer.setClearColor(0xffffff, 0);
     renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
@@ -1069,9 +1090,16 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
     let previousPointerPosition = { x: 0, y: 0 };
     const rotation = { x: 0, y: 0 };
     const rotationVelocity = { x: 0, y: 0 };
+    let autoRotationPhase = 0;
+    let previousAnimationTime = performance.now() * 0.001;
 
     const handlePointerDown = (event: PointerEvent) => {
       event.preventDefault();
+      if (sceneRef.current?.model) {
+        rotation.x = sceneRef.current.model.rotation.x;
+        rotation.y = sceneRef.current.model.rotation.y;
+        autoRotationPhase = 0;
+      }
       isDraggingRef.current = true;
       renderer.domElement.setPointerCapture(event.pointerId);
       previousPointerPosition = { x: event.clientX, y: event.clientY };
@@ -1136,6 +1164,8 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
 
       const { scene, camera, renderer, model } = sceneRef.current;
       const time = performance.now() * 0.001; // 秒に変換
+      const deltaTime = Math.min(0.05, Math.max(0, time - previousAnimationTime));
+      previousAnimationTime = time;
 
       // 浮遊アニメーション（ゆっくり上下にぷかぷか）
       if (model) {
@@ -1146,15 +1176,21 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
         model.position.y = floatBaseY + Math.sin(time * 0.72) * 0.045;
 
         if (!isDraggingRef.current) {
-          rotation.y += rotationVelocity.y + 0.00016 + Math.sin(time * 0.19) * 0.00005;
-          rotation.x = Math.max(-1.18, Math.min(1.18, rotation.x + rotationVelocity.x));
-          model.rotation.set(
-            rotation.x + Math.sin(time * 0.16) * 0.022,
-            rotation.y + Math.sin(time * 0.11) * 0.035,
-            Math.sin(time * 0.13) * 0.008
+          const frameScale = Math.min(1, deltaTime * 60);
+          autoRotationPhase += AUTO_ROTATION_SPEED * deltaTime;
+          rotation.y += rotationVelocity.y * frameScale;
+          rotation.x = Math.max(
+            -1.18,
+            Math.min(1.18, rotation.x + rotationVelocity.x * frameScale)
           );
-          rotationVelocity.x *= 0.945;
-          rotationVelocity.y *= 0.945;
+          model.rotation.set(
+            rotation.x + Math.sin(autoRotationPhase * 0.63) * 0.24,
+            rotation.y + autoRotationPhase,
+            Math.sin(autoRotationPhase * 0.41) * 0.07
+          );
+          const damping = Math.pow(0.945, deltaTime * 60);
+          rotationVelocity.x *= damping;
+          rotationVelocity.y *= damping;
         }
       }
 
@@ -1422,6 +1458,10 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
             }
           }
         });
+
+        if (isEightBall) {
+          meshes.forEach(tuneEightBallMaterial);
+        }
 
         if (usesPlushCatStyling) {
           meshes.forEach((mesh) => {
