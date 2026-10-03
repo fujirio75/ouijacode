@@ -117,29 +117,6 @@ function createDataParticles() {
   return points;
 }
 
-function createLabel(text: string) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 128;
-  const context = canvas.getContext('2d')!;
-  context.font = '600 64px Arial, sans-serif';
-  const textWidth = context.measureText(text).width;
-  canvas.width = Math.ceil(textWidth + 28);
-  context.font = '600 64px Arial, sans-serif';
-  context.fillStyle = '#181818';
-  context.textAlign = 'center';
-  context.textBaseline = 'middle';
-  context.fillText(text, canvas.width / 2, 64);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.generateMipmaps = false;
-  texture.minFilter = THREE.LinearFilter;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, toneMapped: false, transparent: true, depthWrite: false }));
-  sprite.userData.aspect = canvas.width / canvas.height;
-  sprite.scale.set(0.32 * canvas.width / canvas.height, 0.32, 1);
-  return sprite;
-}
-
 export function createOrbitalField(root: THREE.Group) {
   const field = new THREE.Group();
   field.name = 'orbital_network';
@@ -196,33 +173,11 @@ export function createOrbitalField(root: THREE.Group) {
     return { ring, marker, phase: index * 2.399, speed: (index % 2 ? 1 : -1) * 0.025 };
   });
 
-  const labelDefinitions = [
-    { text: 'Unity', ring: 0, angle: 2.35, offset: [-0.05, 0.68], color: 0xf21e3a },
-    { text: 'TypeScript', ring: 2, angle: 0.2, offset: [0.48, 0.55], color: 0x00a9ce },
-    { text: 'Three.js', ring: 1, angle: 3.62, offset: [-0.65, -0.1], color: 0x08b879 },
-    { text: 'C#', ring: 0, angle: 5.78, offset: [0.55, -0.32], color: 0xffc400 }
-  ];
-  const labels = labelDefinitions.map(definition => {
-    const label = createLabel(definition.text);
-    const anchor = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), new THREE.MeshBasicMaterial({ color: 0x242424, toneMapped: false }));
-    const leader = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0xb0b5ba, toneMapped: false }));
-    const cross = new THREE.Group();
-    const crossMaterial = new THREE.MeshBasicMaterial({ color: definition.color, toneMapped: false });
-    cross.add(new THREE.Mesh(new THREE.PlaneGeometry(0.11, 0.021), crossMaterial), new THREE.Mesh(new THREE.PlaneGeometry(0.021, 0.11), crossMaterial));
-    field.add(label, anchor, leader, cross);
-    return { definition, label, anchor, leader, cross };
-  });
   const localView = new THREE.Quaternion();
   const inverseWorld = new THREE.Quaternion();
-  const right = new THREE.Vector3();
-  const up = new THREE.Vector3();
-  const anchorPosition = new THREE.Vector3();
-  const projectedLabel = new THREE.Vector3();
-  const labelBounds = labels.map(() => new THREE.Vector4());
-  const candidates = [[0, 0], [0, 0.14], [0, -0.14], [-0.2, 0], [0.2, 0], [-0.2, 0.16], [0.2, 0.16], [-0.2, -0.16], [0.2, -0.16], [0, 0.32], [0, -0.32]];
 
   return {
-    update(time: number, camera: THREE.PerspectiveCamera, drawingHeight: number, pixelRatio: number, exclusions: THREE.Vector4[]) {
+    update(time: number, camera: THREE.PerspectiveCamera, drawingHeight: number, pixelRatio: number) {
       particles.material.uniforms.uTime.value = time;
       particles.material.uniforms.uHeight.value = drawingHeight;
       particles.material.uniforms.uPixelRatio.value = pixelRatio;
@@ -232,8 +187,6 @@ export function createOrbitalField(root: THREE.Group) {
       field.updateWorldMatrix(true, true);
       field.getWorldQuaternion(inverseWorld).invert();
       camera.getWorldQuaternion(localView).premultiply(inverseWorld);
-      right.set(1, 0, 0).applyQuaternion(localView);
-      up.set(0, 1, 0).applyQuaternion(localView);
       const positionOnRing = (ring: typeof rings[number], angle: number) => {
         point.set(Math.cos(angle) * ring.definition.radius[0], Math.sin(angle) * ring.definition.radius[1], 0);
         ring.group.localToWorld(point);
@@ -242,45 +195,6 @@ export function createOrbitalField(root: THREE.Group) {
       markers.forEach(({ ring, marker, phase, speed }) => {
         marker.position.copy(positionOnRing(ring, phase + time * speed));
         marker.quaternion.copy(localView);
-      });
-      labels.forEach(({ definition, label, anchor, leader, cross }, labelIndex) => {
-        anchorPosition.copy(positionOnRing(rings[definition.ring], definition.angle));
-        anchor.position.copy(anchorPosition);
-        cross.position.copy(anchorPosition).addScaledVector(right, definition.offset[0]).addScaledVector(up, definition.offset[1]);
-        cross.quaternion.copy(localView);
-        label.position.copy(cross.position).addScaledVector(up, 0.23);
-        projectedLabel.copy(label.position);
-        field.localToWorld(projectedLabel);
-        const depth = -point.copy(projectedLabel).applyMatrix4(camera.matrixWorldInverse).z;
-        const worldHeight = 2 * depth * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-        const labelHeight = 28 * pixelRatio / drawingHeight;
-        label.scale.set(worldHeight * labelHeight * label.userData.aspect, worldHeight * labelHeight, 1);
-        projectedLabel.project(camera);
-        const halfWidth = labelHeight * label.userData.aspect / camera.aspect;
-        const halfHeight = labelHeight;
-        let bestScore = Infinity;
-        let bestX = projectedLabel.x;
-        let bestY = projectedLabel.y;
-        candidates.forEach(([dx, dy]) => {
-          const x = THREE.MathUtils.clamp(projectedLabel.x + dx, -0.96 + halfWidth, 0.96 - halfWidth);
-          const y = THREE.MathUtils.clamp(projectedLabel.y + dy, -0.91 + halfHeight, 0.94 - halfHeight);
-          let score = (x - projectedLabel.x) ** 2 + (y - projectedLabel.y) ** 2;
-          const overlap = (rect: THREE.Vector4) => x + halfWidth + 0.025 > rect.x && x - halfWidth - 0.025 < rect.z && y + halfHeight > rect.y && y - halfHeight - 0.08 < rect.w;
-          exclusions.forEach(rect => { if (overlap(rect)) score += 10; });
-          labelBounds.slice(0, labelIndex).forEach(rect => { if (overlap(rect)) score += 10; });
-          if (score < bestScore) { bestScore = score; bestX = x; bestY = y; }
-        });
-        projectedLabel.set(bestX, bestY, projectedLabel.z).unproject(camera);
-        label.position.copy(field.worldToLocal(projectedLabel));
-        cross.position.copy(label.position).addScaledVector(up, -worldHeight * labelHeight * 0.75);
-        cross.scale.setScalar(worldHeight * 8 * pixelRatio / drawingHeight / 0.11);
-        labelBounds[labelIndex].set(bestX - halfWidth, bestY - halfHeight - 0.08, bestX + halfWidth, bestY + halfHeight);
-        const positions = leader.geometry.getAttribute('position');
-        positions.setXYZ(0, anchorPosition.x, anchorPosition.y, anchorPosition.z);
-        point.copy(cross.position).lerp(anchorPosition, 0.15);
-        positions.setXYZ(1, point.x, point.y, point.z);
-        positions.needsUpdate = true;
-        leader.frustumCulled = false;
       });
     }
   };

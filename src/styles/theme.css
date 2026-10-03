@@ -198,7 +198,7 @@
 }
 
 .node-space-root canvas {
-  cursor: grab;
+  cursor: pointer;
   touch-action: none;
 }
 

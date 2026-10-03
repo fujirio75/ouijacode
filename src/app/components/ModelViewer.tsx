@@ -28,9 +28,18 @@ type LightTextureMask = {
 
 interface ModelViewerProps {
   modelUrl?: string;
-  softwareLogoUrl?: string;
-  w3LogoUrl?: string;
+  onActivate?: () => void;
 }
+
+type BallAnimation = {
+  baseQuaternion: THREE.Quaternion;
+  baseScale: THREE.Vector3;
+  currentGaze: THREE.Vector2;
+  group: THREE.Group;
+  nextSaccadeAt: number;
+  random: () => number;
+  targetGaze: THREE.Vector2;
+};
 
 type FloatingNodeAnimation = {
   basePosition: THREE.Vector3;
@@ -75,6 +84,7 @@ type FloatingCueAnimation = {
 };
 
 type NodeSpaceAnimations = {
+  ball: BallAnimation | null;
   cues: FloatingCueAnimation[];
   field: ReturnType<typeof createOrbitalField> | null;
   nodes: FloatingNodeAnimation[];
@@ -552,7 +562,6 @@ function addSurfaceFur(mesh: THREE.Mesh, lightTextureMask: LightTextureMask | nu
 
 const ACCENT_RED = 0xd91432;
 const ACCENT_RED_CSS = '#d91432';
-const AUTO_ROTATION_SPEED = Math.PI / 48;
 const BALL_RED = 0xc8102e;
 const EIGHT_BALL_SIZE = 3.2;
 
@@ -737,7 +746,8 @@ async function createAccentSvgSprite(url: string, height: number) {
 function tuneEightBallMaterial(mesh: THREE.Mesh) {
   if (/Eight_Ball_Phenolic_Resin/i.test(mesh.name)) {
     const originalGeometry = mesh.geometry;
-    mesh.geometry = new THREE.IcosahedronGeometry(1, 3);
+    mesh.geometry = new THREE.SphereGeometry(1, 96, 64);
+    mesh.geometry.computeVertexNormals();
     originalGeometry.dispose();
   }
 
@@ -751,7 +761,7 @@ function tuneEightBallMaterial(mesh: THREE.Mesh) {
       material.emissive.set(0x000000);
       material.emissiveIntensity = 0;
       material.envMapIntensity = 0;
-      material.flatShading = true;
+      material.flatShading = false;
       material.metalness = 0;
       material.normalMap = null;
       material.roughness = 1;
@@ -1084,60 +1094,23 @@ function createFloatingCues(root: THREE.Group) {
   });
 }
 
-async function addEightBallNodeSpace(
-  root: THREE.Group,
-  softwareLogoUrl?: string,
-  w3LogoUrl?: string
-) {
-  const animations: NodeSpaceAnimations = {
+function addEightBallNodeSpace(root: THREE.Group, ball: THREE.Group): NodeSpaceAnimations {
+  return {
+    ball: {
+      baseQuaternion: ball.quaternion.clone(),
+      baseScale: ball.scale.clone(),
+      currentGaze: new THREE.Vector2(),
+      group: ball,
+      nextSaccadeAt: 1.1,
+      random: seededRandom(19303),
+      targetGaze: new THREE.Vector2()
+    },
     cues: [],
     field: createOrbitalField(root),
     nodes: [],
     path: null,
     sprites: []
   };
-  animations.cues = createFloatingCues(root);
-
-  const brandDefinitions = [
-    {
-      fallback: 'W3',
-      height: 1.08,
-      phase: 1.4,
-      position: new THREE.Vector3(-3.25, -2.3, 0.45),
-      url: w3LogoUrl
-    },
-    {
-      fallback: 'Software',
-      height: 0.86,
-      phase: 4.1,
-      position: new THREE.Vector3(2.8, 2.38, 0.35),
-      url: softwareLogoUrl
-    }
-  ];
-
-  for (const definition of brandDefinitions) {
-    let sprite: THREE.Sprite;
-    try {
-      sprite = definition.url
-        ? await createAccentSvgSprite(definition.url, definition.height)
-        : createTextSprite(definition.fallback, definition.height);
-    } catch (error) {
-      console.warn('SVG node label fell back to canvas text:', error);
-      sprite = createTextSprite(definition.fallback, definition.height);
-    }
-    sprite.position.copy(definition.position);
-    sprite.renderOrder = 3;
-    sprite.material.depthTest = false;
-    root.add(sprite);
-    animations.sprites.push({
-      basePosition: definition.position.clone(),
-      baseScale: sprite.scale.clone(),
-      phase: definition.phase,
-      sprite
-    });
-  }
-
-  return animations;
 }
 
 function updateNodeSpaceFraming(
@@ -1183,15 +1156,16 @@ function disposeObject3D(root: THREE.Object3D) {
   });
 }
 
-export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewerProps) {
+export function ModelViewer({ modelUrl, onActivate }: ModelViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const onActivateRef = useRef(onActivate);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const isDraggingRef = useRef(false);
   const blinkMeshesRef = useRef<THREE.Mesh[]>([]);
   const armBonesRef = useRef<{ left: THREE.Bone | null; right: THREE.Bone | null }>({ left: null, right: null });
   const envMapRef = useRef<THREE.Texture | null>(null);
-  const nodeSpaceAnimationsRef = useRef<NodeSpaceAnimations>({ cues: [], field: null, nodes: [], path: null, sprites: [] });
+  const nodeSpaceAnimationsRef = useRef<NodeSpaceAnimations>({ ball: null, cues: [], field: null, nodes: [], path: null, sprites: [] });
   const sceneRef = useRef<{
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
@@ -1201,8 +1175,12 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
   } | null>(null);
 
   useEffect(() => {
+    onActivateRef.current = onActivate;
+  }, [onActivate]);
+
+  useEffect(() => {
     if (!containerRef.current) return;
-    nodeSpaceAnimationsRef.current = { cues: [], field: null, nodes: [], path: null, sprites: [] };
+    nodeSpaceAnimationsRef.current = { ball: null, cues: [], field: null, nodes: [], path: null, sprites: [] };
 
     // シーンの初期化
     const scene = new THREE.Scene();
@@ -1294,22 +1272,26 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
 
     // 空間全体を回すポインターコントロール
     let previousPointerPosition = { x: 0, y: 0 };
+    let pointerStartPosition = { x: 0, y: 0 };
+    let pointerTravel = 0;
     const rotation = { x: 0, y: 0 };
     const rotationVelocity = { x: 0, y: 0 };
-    let autoRotationPhase = 0;
     let elapsedTime = 0;
     let previousAnimationTime = performance.now() * 0.001;
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
 
     const handlePointerDown = (event: PointerEvent) => {
       event.preventDefault();
       if (sceneRef.current?.model) {
         rotation.x = sceneRef.current.model.rotation.x;
         rotation.y = sceneRef.current.model.rotation.y;
-        autoRotationPhase = 0;
       }
       isDraggingRef.current = true;
       renderer.domElement.setPointerCapture(event.pointerId);
       previousPointerPosition = { x: event.clientX, y: event.clientY };
+      pointerStartPosition = previousPointerPosition;
+      pointerTravel = 0;
     };
 
     const handlePointerMove = (event: PointerEvent) => {
@@ -1317,6 +1299,7 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
 
       const deltaX = event.clientX - previousPointerPosition.x;
       const deltaY = event.clientY - previousPointerPosition.y;
+      pointerTravel += Math.hypot(deltaX, deltaY);
       rotationVelocity.y = deltaX * 0.00038;
       rotationVelocity.x = deltaY * 0.0003;
       rotation.y += deltaX * 0.0042;
@@ -1333,6 +1316,23 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
       isDraggingRef.current = false;
       if (renderer.domElement.hasPointerCapture(event.pointerId)) {
         renderer.domElement.releasePointerCapture(event.pointerId);
+      }
+
+      const tapDistance = Math.hypot(
+        event.clientX - pointerStartPosition.x,
+        event.clientY - pointerStartPosition.y
+      );
+      const ball = nodeSpaceAnimationsRef.current.ball;
+      if (ball && pointerTravel < 10 && tapDistance < 10) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        pointer.set(
+          ((event.clientX - rect.left) / rect.width) * 2 - 1,
+          -((event.clientY - rect.top) / rect.height) * 2 + 1
+        );
+        raycaster.setFromCamera(pointer, camera);
+        if (raycaster.intersectObject(ball.group, true).length > 0) {
+          onActivateRef.current?.();
+        }
       }
     };
 
@@ -1366,6 +1366,8 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
     const worldPoint = new THREE.Vector3();
     const cueRotation = new THREE.Quaternion();
     const cueEuler = new THREE.Euler();
+    const ballRotation = new THREE.Quaternion();
+    const ballEuler = new THREE.Euler(0, 0, 0, 'YXZ');
     const labelExclusions = [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()];
 
     // アニメーションループ
@@ -1389,21 +1391,48 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
 
         if (!isDraggingRef.current) {
           const frameScale = Math.min(1, deltaTime * 60);
-          autoRotationPhase += AUTO_ROTATION_SPEED * deltaTime;
           rotation.y += rotationVelocity.y * frameScale;
           rotation.x = Math.max(
             -1.18,
             Math.min(1.18, rotation.x + rotationVelocity.x * frameScale)
           );
-          model.rotation.set(
-            rotation.x + Math.sin(autoRotationPhase * 0.63) * 0.24,
-            rotation.y + autoRotationPhase,
-            Math.sin(autoRotationPhase * 0.41) * 0.07
-          );
+          model.rotation.set(rotation.x, rotation.y, 0);
           const damping = Math.pow(0.945, deltaTime * 60);
           rotationVelocity.x *= damping;
           rotationVelocity.y *= damping;
         }
+      }
+
+      const ball = nodeSpaceAnimationsRef.current.ball;
+      if (ball) {
+        if (time >= ball.nextSaccadeAt) {
+          const horizontalDirection = ball.random() < 0.5 ? -1 : 1;
+          ball.targetGaze.set(
+            (ball.random() - 0.5) * 0.38,
+            horizontalDirection * (0.32 + ball.random() * 0.34)
+          );
+          ball.nextSaccadeAt = time + 1.8 + ball.random() * 3.4;
+        }
+
+        const saccadeCatchUp = 1 - Math.exp(-deltaTime * 20);
+        ball.currentGaze.lerp(ball.targetGaze, saccadeCatchUp);
+        const microPitch = Math.sin(time * 10.7) * 0.009 + Math.sin(time * 17.9 + 0.8) * 0.005;
+        const microYaw = Math.sin(time * 8.9 + 1.3) * 0.012 + Math.sin(time * 14.3) * 0.006;
+        const microRoll = Math.sin(time * 11.8 + 2.1) * 0.006;
+        ballEuler.set(
+          ball.currentGaze.x + microPitch,
+          ball.currentGaze.y + microYaw,
+          microRoll
+        );
+        ballRotation.setFromEuler(ballEuler);
+        ball.group.quaternion.copy(ball.baseQuaternion).multiply(ballRotation);
+
+        const beatPhase = (time % 1.18) / 1.18;
+        const firstBeat = Math.exp(-Math.pow((beatPhase - 0.08) / 0.045, 2));
+        const secondBeat = Math.exp(-Math.pow((beatPhase - 0.2) / 0.06, 2));
+        const release = Math.exp(-Math.pow((beatPhase - 0.31) / 0.075, 2));
+        const heartbeatScale = 1 + firstBeat * 0.021 + secondBeat * 0.014 - release * 0.006;
+        ball.group.scale.copy(ball.baseScale).multiplyScalar(heartbeatScale);
       }
 
       nodeSpaceAnimationsRef.current.cues.forEach((cue) => {
@@ -1508,7 +1537,7 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
         item.sprite.position.copy(model!.worldToLocal(worldPoint));
       });
 
-      nodeSpaceAnimationsRef.current.field?.update(time, camera, renderer.domElement.height, renderer.getPixelRatio(), labelExclusions);
+      nodeSpaceAnimationsRef.current.field?.update(time, camera, renderer.domElement.height, renderer.getPixelRatio());
 
       if (model?.userData.isNodeSpace) {
         model.updateMatrixWorld(true);
@@ -1625,7 +1654,7 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
       disposeObject3D(sceneRef.current.model);
       sceneRef.current.model = null;
     }
-    nodeSpaceAnimationsRef.current = { cues: [], field: null, nodes: [], path: null, sprites: [] };
+    nodeSpaceAnimationsRef.current = { ball: null, cues: [], field: null, nodes: [], path: null, sprites: [] };
 
     // まばたきメッシュ・腕ボーン参照をリセット
     blinkMeshesRef.current = [];
@@ -1738,7 +1767,7 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
           nodeSpace.name = 'eight_ball_node_space';
           nodeSpace.userData.isNodeSpace = true;
           nodeSpace.add(object);
-          const animations = await addEightBallNodeSpace(nodeSpace, softwareLogoUrl, w3LogoUrl);
+          const animations = addEightBallNodeSpace(nodeSpace, object);
 
           if (!sceneRef.current || cancelled) {
             disposeObject3D(nodeSpace);
@@ -1779,7 +1808,7 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
     return () => {
       cancelled = true;
     };
-  }, [modelUrl, softwareLogoUrl, w3LogoUrl]);
+  }, [modelUrl]);
 
   return (
     <div className="relative w-full h-full">
