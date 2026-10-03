@@ -205,7 +205,3 @@
 .node-space-root canvas:active {
   cursor: grabbing;
 }
-
-.node-space-vignette {
-  background: radial-gradient(circle at center, transparent 48%, rgb(217 20 50 / 8%) 100%);
-}

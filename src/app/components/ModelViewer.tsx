@@ -6,6 +6,7 @@ import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+import { createOrbitalField } from './OrbitalField';
 
 const ENABLE_MODEL_INTERACTION = true;
 const PLUSH_SHADER_KEY = 'w3-plush-soft-v1';
@@ -63,8 +64,19 @@ type FloatingSpriteAnimation = {
   sprite: THREE.Sprite;
 };
 
+type FloatingCueAnimation = {
+  basePosition: THREE.Vector3;
+  baseQuaternion: THREE.Quaternion;
+  drift: THREE.Vector3;
+  group: THREE.Group;
+  index: number;
+  phase: number;
+  spinSpeed: number;
+};
+
 type NodeSpaceAnimations = {
-  field: THREE.Points | null;
+  cues: FloatingCueAnimation[];
+  field: ReturnType<typeof createOrbitalField> | null;
   nodes: FloatingNodeAnimation[];
   path: FloatingPathAnimation | null;
   sprites: FloatingSpriteAnimation[];
@@ -540,9 +552,9 @@ function addSurfaceFur(mesh: THREE.Mesh, lightTextureMask: LightTextureMask | nu
 
 const ACCENT_RED = 0xd91432;
 const ACCENT_RED_CSS = '#d91432';
-const AUTO_ROTATION_SPEED = Math.PI / 24;
+const AUTO_ROTATION_SPEED = Math.PI / 48;
 const BALL_RED = 0xc8102e;
-const EIGHT_BALL_SIZE = 2.9;
+const EIGHT_BALL_SIZE = 3.2;
 
 const SKILL_NODES = [
   {
@@ -635,9 +647,10 @@ function createGlowTexture() {
   if (!context) return new THREE.Texture();
 
   const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 62);
-  gradient.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
-  gradient.addColorStop(0.16, 'rgba(255, 255, 255, 0.42)');
-  gradient.addColorStop(0.48, 'rgba(255, 255, 255, 0.1)');
+  gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+  gradient.addColorStop(0.28, 'rgba(255, 255, 255, 1)');
+  gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.58)');
+  gradient.addColorStop(0.72, 'rgba(255, 255, 255, 0.16)');
   gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
   context.fillStyle = gradient;
   context.fillRect(0, 0, 128, 128);
@@ -647,52 +660,6 @@ function createGlowTexture() {
   texture.minFilter = THREE.LinearFilter;
   texture.generateMipmaps = false;
   return texture;
-}
-
-function createAmbientField(root: THREE.Group) {
-  const count = 140;
-  const positions = new Float32Array(count * 3);
-  const colors = new Float32Array(count * 3);
-  const random = seededRandom(8317);
-
-  for (let index = 0; index < count; index++) {
-    let x = 0;
-    let y = 0;
-    let z = 0;
-    do {
-      x = (random() - 0.5) * 10.8;
-      y = (random() - 0.5) * 6.8;
-      z = (random() - 0.5) * 7.2;
-    } while (x * x + y * y < 3.4);
-
-    const offset = index * 3;
-    positions[offset] = x;
-    positions[offset + 1] = y;
-    positions[offset + 2] = z;
-    const brightness = 0.32 + random() * 0.5;
-    colors[offset] = brightness;
-    colors[offset + 1] = brightness * 0.06;
-    colors[offset + 2] = brightness * 0.16;
-  }
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  const points = new THREE.Points(
-    geometry,
-    new THREE.PointsMaterial({
-      blending: THREE.NormalBlending,
-      depthWrite: false,
-      opacity: 0.3,
-      size: 0.018,
-      sizeAttenuation: true,
-      transparent: true,
-      vertexColors: true
-    })
-  );
-  points.renderOrder = -1;
-  root.add(points);
-  return points;
 }
 
 function createTextSprite(text: string, height = 0.27) {
@@ -759,6 +726,7 @@ async function createAccentSvgSprite(url: string, height: number) {
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
     map: texture,
     color: 0xffffff,
+    toneMapped: false,
     depthWrite: false,
     transparent: true
   }));
@@ -767,18 +735,35 @@ async function createAccentSvgSprite(url: string, height: number) {
 }
 
 function tuneEightBallMaterial(mesh: THREE.Mesh) {
+  if (/Eight_Ball_Phenolic_Resin/i.test(mesh.name)) {
+    const originalGeometry = mesh.geometry;
+    mesh.geometry = new THREE.IcosahedronGeometry(1, 3);
+    originalGeometry.dispose();
+  }
+
   const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
   materials.forEach((material) => {
-    if (
-      material instanceof THREE.MeshStandardMaterial &&
-      /polished phenolic resin\s*-\s*black/i.test(material.name)
-    ) {
-      material.color.set(BALL_RED);
-      material.emissive.set(0x180006);
-      material.emissiveIntensity = 0.1;
-      material.envMapIntensity = 1.05;
-      material.metalness = 0.06;
-      material.roughness = 0.2;
+    if (material instanceof THREE.MeshStandardMaterial) {
+      if (/polished phenolic resin\s*-\s*black/i.test(material.name)) {
+        material.color.set(BALL_RED);
+      }
+
+      material.emissive.set(0x000000);
+      material.emissiveIntensity = 0;
+      material.envMapIntensity = 0;
+      material.flatShading = true;
+      material.metalness = 0;
+      material.normalMap = null;
+      material.roughness = 1;
+
+      if (material instanceof THREE.MeshPhysicalMaterial) {
+        material.clearcoat = 0;
+        material.clearcoatRoughness = 1;
+        material.iridescence = 0;
+        material.sheen = 0;
+        material.specularIntensity = 0;
+      }
+
       material.needsUpdate = true;
     }
   });
@@ -885,37 +870,247 @@ function createSkillPath(
   return { glowLine, line, pulses } satisfies FloatingPathAnimation;
 }
 
+function createCueWoodTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 512;
+  const context = canvas.getContext('2d');
+  if (!context) return new THREE.Texture();
+
+  context.fillStyle = '#f4f1e9';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  const random = seededRandom(49271);
+  for (let index = 0; index < 84; index++) {
+    const startX = random() * canvas.width;
+    const bend = (random() - 0.5) * 18;
+    context.beginPath();
+    context.moveTo(startX, -8);
+    context.bezierCurveTo(
+      startX + bend,
+      canvas.height * 0.28,
+      startX - bend * 0.7,
+      canvas.height * 0.72,
+      startX + bend * 0.35,
+      canvas.height + 8
+    );
+    context.strokeStyle = `rgba(74, 42, 18, ${0.025 + random() * 0.075})`;
+    context.lineWidth = 0.35 + random() * 1.15;
+    context.stroke();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(1.2, 1);
+  texture.anisotropy = 8;
+  return texture;
+}
+
+function createBilliardCuePrototype() {
+  const cue = new THREE.Group();
+  cue.name = 'realistic_billiard_cue_prototype';
+  const woodTexture = createCueWoodTexture();
+  const maple = new THREE.MeshStandardMaterial({
+    color: 0xe8c99b,
+    envMapIntensity: 0.25,
+    map: woodTexture,
+    metalness: 0,
+    roughness: 0.68
+  });
+  const accent = new THREE.MeshStandardMaterial({
+    color: ACCENT_RED,
+    envMapIntensity: 0.28,
+    map: woodTexture,
+    metalness: 0,
+    roughness: 0.58
+  });
+  const accentDark = accent.clone();
+  accentDark.color.set(0x4b0b18);
+  accentDark.roughness = 0.65;
+  const ivory = new THREE.MeshStandardMaterial({
+    color: 0xf2eadc,
+    envMapIntensity: 0.7,
+    metalness: 0,
+    roughness: 0.28
+  });
+  const metal = new THREE.MeshStandardMaterial({
+    color: 0xc9cdd0,
+    envMapIntensity: 1.25,
+    metalness: 0.9,
+    roughness: 0.18
+  });
+  const grip = new THREE.MeshStandardMaterial({
+    color: 0x181414,
+    metalness: 0,
+    roughness: 0.86
+  });
+  const leather = new THREE.MeshStandardMaterial({
+    color: 0x25435b,
+    metalness: 0,
+    roughness: 0.92
+  });
+  const rubber = new THREE.MeshStandardMaterial({
+    color: 0x111111,
+    metalness: 0,
+    roughness: 0.96
+  });
+
+  const addCylinder = (
+    name: string,
+    radiusTop: number,
+    radiusBottom: number,
+    height: number,
+    y: number,
+    material: THREE.MeshStandardMaterial,
+    materialRole: string
+  ) => {
+    const mesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(radiusTop, radiusBottom, height, 24, 1, false),
+      material
+    );
+    mesh.name = name;
+    mesh.position.y = y;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.userData.materialRole = materialRole;
+    cue.add(mesh);
+    return mesh;
+  };
+
+  // A 58-inch playing cue is typically split into a 29-inch shaft and 29-inch butt.
+  addCylinder('Leather tip', 0.024, 0.0255, 0.04, 2.98, leather, 'leather');
+  addCylinder('Ivory ferrule', 0.0255, 0.029, 0.075, 2.9225, ivory, 'ivory');
+  addCylinder('Maple shaft', 0.0285, 0.044, 2.83, 1.47, maple, 'shaft');
+  addCylinder('Shaft joint collar', 0.045, 0.045, 0.055, 0.0275, ivory, 'ivory');
+  addCylinder('Stainless joint ring', 0.047, 0.047, 0.05, -0.025, metal, 'metal');
+  addCylinder('Butt joint collar', 0.049, 0.049, 0.07, -0.085, accentDark, 'accent-dark');
+  addCylinder('Tapered forearm', 0.049, 0.057, 1.1, -0.67, accent, 'accent');
+  addCylinder('Forearm trim ring', 0.058, 0.058, 0.05, -1.245, metal, 'metal');
+  addCylinder('Linen grip', 0.058, 0.061, 0.9, -1.72, grip, 'grip');
+  addCylinder('Grip trim ring', 0.062, 0.062, 0.05, -2.195, ivory, 'ivory');
+  addCylinder('Decorated butt sleeve', 0.062, 0.065, 0.55, -2.495, accentDark, 'accent-dark');
+  addCylinder('Butt sleeve trim ring', 0.066, 0.066, 0.04, -2.79, metal, 'metal');
+  addCylinder('Ivory butt cap', 0.066, 0.066, 0.12, -2.87, ivory, 'ivory');
+  addCylinder('Rubber bumper', 0.048, 0.057, 0.07, -2.965, rubber, 'rubber');
+
+  const addInlaySet = (name: string, y: number, radius: number, height: number) => {
+    for (let index = 0; index < 4; index++) {
+      const angle = index * Math.PI * 0.5;
+      const inlay = new THREE.Mesh(
+        new THREE.OctahedronGeometry(1, 0),
+        ivory
+      );
+      inlay.name = `${name}_${index + 1}`;
+      inlay.position.set(Math.sin(angle) * radius, y, Math.cos(angle) * radius);
+      inlay.rotation.y = angle;
+      inlay.scale.set(0.011, height, 0.0055);
+      inlay.userData.materialRole = 'ivory';
+      cue.add(inlay);
+    }
+  };
+  addInlaySet('Forearm diamond inlay', -0.68, 0.055, 0.16);
+  addInlaySet('Butt sleeve diamond inlay', -2.49, 0.063, 0.12);
+
+  return cue;
+}
+
+function cloneCueWithColor(prototype: THREE.Group, color: THREE.ColorRepresentation) {
+  const cue = prototype.clone(true);
+  const accentColor = new THREE.Color(color);
+  cue.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return;
+    const sourceMaterial = Array.isArray(child.material) ? child.material[0] : child.material;
+    if (!(sourceMaterial instanceof THREE.MeshStandardMaterial)) return;
+    const material = sourceMaterial.clone();
+    const role = child.userData.materialRole;
+    if (role === 'accent') {
+      material.color.copy(accentColor);
+    } else if (role === 'accent-dark') {
+      material.color.copy(accentColor).multiplyScalar(0.7);
+    }
+    child.material = material;
+  });
+  return cue;
+}
+
+function createFloatingCues(root: THREE.Group) {
+  const prototype = createBilliardCuePrototype();
+  const definitions = [
+    { color: '#ed2546', drift: [0.13, 0.12, 0.2], phase: 0.2, position: [-4.7, 1.9, 1.8], rotation: [0.18, 0.42, -0.46], scale: 0.88 },
+    { color: '#245bce', drift: [0.1, 0.16, 0.15], phase: 0.9, position: [4.65, 2.65, 0.4], rotation: [0.35, -0.58, 0.52], scale: 0.54 },
+    { color: '#069d7a', drift: [0.16, 0.1, 0.19], phase: 1.7, position: [-4.3, -3.1, 2.5], rotation: [-0.28, 0.5, 0.88], scale: 0.96 },
+    { color: '#f6c200', drift: [0.12, 0.17, 0.13], phase: 2.5, position: [4.65, -2.6, 1.9], rotation: [0.32, 0.2, -0.38], scale: 0.89 },
+    { color: '#7a36b0', drift: [0.09, 0.14, 0.22], phase: 3.3, position: [-2.2, 2.8, -0.1], rotation: [0.25, 0.26, -0.43], scale: 0.4 },
+    { color: '#ff721b', drift: [0.15, 0.11, 0.18], phase: 4.1, position: [0.1, -4.1, 0.7], rotation: [-0.3, -0.38, -0.48], scale: 0.65 },
+    { color: '#00a9bb', drift: [0.11, 0.18, 0.16], phase: 4.9, position: [-2.95, 1.35, -4.3], rotation: [0.45, 0.82, -0.7], scale: 0.36 },
+    { color: '#202327', drift: [0.14, 0.09, 0.21], phase: 5.7, position: [3.6, -0.1, -3.8], rotation: [-0.32, 0.62, 0.58], scale: 0.33 },
+    { color: '#e50087', drift: [0.1, 0.15, 0.17], phase: 6.5, position: [-4.3, -0.45, 1.35], rotation: [0.2, -0.2, -1.28], scale: 0.63 },
+    { color: '#ef641c', drift: [0.17, 0.12, 0.14], phase: 7.3, position: [4.7, -0.8, -0.6], rotation: [-0.18, 0.3, 0.83], scale: 0.43 },
+    { color: '#286fce', drift: [0.12, 0.1, 0.23], phase: 8.1, position: [-4.4, -1.85, -1.2], rotation: [0.28, 0.48, -0.34], scale: 0.52 },
+    { color: '#91b300', drift: [0.1, 0.19, 0.15], phase: 8.9, position: [1.3, 4.0, -2.4], rotation: [-0.48, -0.96, 0.55], scale: 0.48 },
+    { color: '#ed2546', drift: [0.13, 0.13, 0.18], phase: 9.7, position: [-0.85, 3.1, -4.7], rotation: [0.3, 0.76, 0.24], scale: 0.3 },
+    { color: '#03a496', drift: [0.11, 0.16, 0.2], phase: 10.5, position: [-1.85, -2.45, -2.15], rotation: [-0.24, -0.82, 0.4], scale: 0.34 },
+    { color: '#ed2546', drift: [0.16, 0.11, 0.19], phase: 11.2, position: [-5.7, -2.4, -3.6], rotation: [0.28, 0.52, -0.38], scale: 0.45 },
+    { color: '#245bce', drift: [0.11, 0.17, 0.14], phase: 11.9, position: [6.35, 3.2, -2.1], rotation: [-0.38, -0.64, -0.25], scale: 0.58 },
+    { color: '#08ae72', drift: [0.17, 0.12, 0.18], phase: 12.6, position: [0.85, -4.5, -3.6], rotation: [-0.35, 0.46, 0.4], scale: 0.5 },
+    { color: '#f6c200', drift: [0.12, 0.18, 0.15], phase: 13.3, position: [4.0, 4.3, 1.5], rotation: [0.42, 0.24, -1.05], scale: 0.64 },
+    { color: '#873aca', drift: [0.1, 0.15, 0.22], phase: 14, position: [-4.15, 3.1, -2.6], rotation: [0.2, 0.32, -0.72], scale: 0.48 },
+    { color: '#f07b1c', drift: [0.15, 0.12, 0.17], phase: 14.7, position: [2.45, -2.9, 0.15], rotation: [-0.22, -0.44, 0.53], scale: 0.44 },
+    { color: '#0cadba', drift: [0.12, 0.19, 0.16], phase: 15.4, position: [-6.4, 0.65, -0.4], rotation: [0.3, 0.88, -1.05], scale: 0.6 },
+    { color: '#202327', drift: [0.15, 0.1, 0.21], phase: 16.1, position: [5.7, 0.1, -4.2], rotation: [-0.28, 0.7, 0.25], scale: 0.41 },
+    { color: '#d90080', drift: [0.11, 0.16, 0.18], phase: 16.8, position: [-2.75, 4.4, 2.4], rotation: [0.36, -0.18, -1.18], scale: 0.73 },
+    { color: '#326bd6', drift: [0.13, 0.11, 0.23], phase: 17.5, position: [2.2, -4.3, -3.7], rotation: [-0.32, 0.92, 0.44], scale: 0.4 },
+    { color: '#91b300', drift: [0.11, 0.18, 0.16], phase: 18.2, position: [3.55, 0.8, -1.75], rotation: [0.3, -0.84, 0.14], scale: 0.32 },
+    { color: '#ba692a', drift: [0.16, 0.13, 0.15], phase: 18.9, position: [-3.1, -4.2, -0.1], rotation: [-0.28, -0.76, -0.38], scale: 0.46 }
+  ] as const;
+
+  return definitions.map((definition, index) => {
+    const cue = cloneCueWithColor(prototype, definition.color);
+    cue.name = `floating_billiard_cue_${index + 1}`;
+    cue.position.fromArray(definition.position);
+    cue.rotation.set(...definition.rotation);
+    cue.scale.setScalar(definition.scale);
+    root.add(cue);
+    return {
+      basePosition: cue.position.clone(),
+      baseQuaternion: cue.quaternion.clone(),
+      drift: new THREE.Vector3().fromArray(definition.drift),
+      group: cue,
+      index,
+      phase: definition.phase,
+      spinSpeed: 0.025 + (index % 5) * 0.006
+    } satisfies FloatingCueAnimation;
+  });
+}
+
 async function addEightBallNodeSpace(
   root: THREE.Group,
   softwareLogoUrl?: string,
   w3LogoUrl?: string
 ) {
   const animations: NodeSpaceAnimations = {
-    field: createAmbientField(root),
+    cues: [],
+    field: createOrbitalField(root),
     nodes: [],
     path: null,
     sprites: []
   };
-  const glowTexture = createGlowTexture();
-
-  SKILL_NODES.forEach((definition, index) => {
-    animations.nodes.push(createSkillNode(root, definition, glowTexture, index));
-  });
-  animations.path = createSkillPath(root, animations.nodes);
+  animations.cues = createFloatingCues(root);
 
   const brandDefinitions = [
     {
       fallback: 'W3',
-      height: 0.9,
+      height: 1.08,
       phase: 1.4,
-      position: new THREE.Vector3(-2.15, -2.12, 0.82),
+      position: new THREE.Vector3(-3.25, -2.3, 0.45),
       url: w3LogoUrl
     },
     {
       fallback: 'Software',
-      height: 0.72,
+      height: 0.86,
       phase: 4.1,
-      position: new THREE.Vector3(2.02, 2.1, 0.64),
+      position: new THREE.Vector3(2.8, 2.38, 0.35),
       url: softwareLogoUrl
     }
   ];
@@ -932,6 +1127,7 @@ async function addEightBallNodeSpace(
     }
     sprite.position.copy(definition.position);
     sprite.renderOrder = 3;
+    sprite.material.depthTest = false;
     root.add(sprite);
     animations.sprites.push({
       basePosition: definition.position.clone(),
@@ -952,14 +1148,21 @@ function updateNodeSpaceFraming(
 ) {
   if (!model?.userData.isNodeSpace) return;
 
-  const aspect = width / Math.max(height, 1);
-  const isMobile = aspect < 0.65;
-  const isPortrait = aspect < 0.95;
-  const distance = isMobile ? 18.5 : isPortrait ? 12.2 : 9.6;
-  const scale = isMobile ? 0.68 : isPortrait ? 0.9 : 1;
-  camera.position.set(0, 0, distance);
+  const aspect = Math.max(0.01, width / Math.max(height, 1));
+  const squareFov = 60;
+  const squareFovRadians = THREE.MathUtils.degToRad(squareFov);
+
+  // Treat the square composition like object-fit: cover at every aspect ratio.
+  camera.aspect = aspect;
+  camera.fov = aspect > 1
+    ? THREE.MathUtils.radToDeg(
+      2 * Math.atan(Math.tan(squareFovRadians * 0.5) / aspect)
+    )
+    : squareFov;
+  camera.position.set(0, 0, 11.2);
   camera.lookAt(0, 0, 0);
-  model.scale.setScalar(scale);
+  camera.updateProjectionMatrix();
+  model.scale.setScalar(1);
 }
 
 function disposeObject3D(root: THREE.Object3D) {
@@ -988,7 +1191,7 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
   const blinkMeshesRef = useRef<THREE.Mesh[]>([]);
   const armBonesRef = useRef<{ left: THREE.Bone | null; right: THREE.Bone | null }>({ left: null, right: null });
   const envMapRef = useRef<THREE.Texture | null>(null);
-  const nodeSpaceAnimationsRef = useRef<NodeSpaceAnimations>({ field: null, nodes: [], path: null, sprites: [] });
+  const nodeSpaceAnimationsRef = useRef<NodeSpaceAnimations>({ cues: [], field: null, nodes: [], path: null, sprites: [] });
   const sceneRef = useRef<{
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
@@ -999,6 +1202,7 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
 
   useEffect(() => {
     if (!containerRef.current) return;
+    nodeSpaceAnimationsRef.current = { cues: [], field: null, nodes: [], path: null, sprites: [] };
 
     // シーンの初期化
     const scene = new THREE.Scene();
@@ -1085,12 +1289,15 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
       updateNodeSpaceFraming(camera, width, height, sceneRef.current.model);
     };
     window.addEventListener('resize', handleResize);
+    const resizeObserver = new ResizeObserver(handleResize);
+    resizeObserver.observe(containerRef.current);
 
     // 空間全体を回すポインターコントロール
     let previousPointerPosition = { x: 0, y: 0 };
     const rotation = { x: 0, y: 0 };
     const rotationVelocity = { x: 0, y: 0 };
     let autoRotationPhase = 0;
+    let elapsedTime = 0;
     let previousAnimationTime = performance.now() * 0.001;
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -1157,15 +1364,20 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
     let floatBaseYSet = false;
     const pathPoint = new THREE.Vector3();
     const worldPoint = new THREE.Vector3();
+    const cueRotation = new THREE.Quaternion();
+    const cueEuler = new THREE.Euler();
+    const labelExclusions = [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()];
 
     // アニメーションループ
     const animate = () => {
       if (!sceneRef.current) return;
 
       const { scene, camera, renderer, model } = sceneRef.current;
-      const time = performance.now() * 0.001; // 秒に変換
-      const deltaTime = Math.min(0.05, Math.max(0, time - previousAnimationTime));
-      previousAnimationTime = time;
+      const nowSeconds = performance.now() * 0.001;
+      const deltaTime = Math.min(0.05, Math.max(0, nowSeconds - previousAnimationTime));
+      previousAnimationTime = nowSeconds;
+      elapsedTime += deltaTime;
+      const time = elapsedTime;
 
       // 浮遊アニメーション（ゆっくり上下にぷかぷか）
       if (model) {
@@ -1193,6 +1405,21 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
           rotationVelocity.y *= damping;
         }
       }
+
+      nodeSpaceAnimationsRef.current.cues.forEach((cue) => {
+        cue.group.position.set(
+          cue.basePosition.x + Math.sin(time * (0.19 + cue.index * 0.006) + cue.phase) * cue.drift.x,
+          cue.basePosition.y + Math.cos(time * (0.23 + cue.index * 0.005) + cue.phase) * cue.drift.y,
+          cue.basePosition.z + Math.sin(time * (0.16 + cue.index * 0.004) + cue.phase * 1.4) * cue.drift.z
+        );
+        cueEuler.set(
+          Math.sin(time * 0.21 + cue.phase) * 0.055,
+          time * cue.spinSpeed + cue.phase * 0.18,
+          Math.cos(time * 0.17 + cue.phase) * 0.045
+        );
+        cueRotation.setFromEuler(cueEuler);
+        cue.group.quaternion.copy(cue.baseQuaternion).multiply(cueRotation);
+      });
 
       nodeSpaceAnimationsRef.current.nodes.forEach((node) => {
         const floatX =
@@ -1250,7 +1477,12 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
         });
       }
 
-      nodeSpaceAnimationsRef.current.sprites.forEach((item) => {
+      model?.updateMatrixWorld(true);
+      const viewHeightAtCenter = 2 * camera.position.length() * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+      const ballRadiusY = EIGHT_BALL_SIZE / viewHeightAtCenter;
+      const ballRadiusX = ballRadiusY / camera.aspect;
+      labelExclusions[0].set(-ballRadiusX, -ballRadiusY, ballRadiusX, ballRadiusY);
+      nodeSpaceAnimationsRef.current.sprites.forEach((item, index) => {
         item.sprite.position.set(
           item.basePosition.x + Math.cos(time * 0.38 + item.phase) * 0.025,
           item.basePosition.y + Math.sin(time * 0.55 + item.phase) * 0.065,
@@ -1259,15 +1491,24 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
         item.sprite.scale.copy(item.baseScale).multiplyScalar(
           1 + Math.sin(time * 0.31 + item.phase) * 0.012
         );
+        item.sprite.getWorldPosition(worldPoint);
+        const depth = -pathPoint.copy(worldPoint).applyMatrix4(camera.matrixWorldInverse).z;
+        const viewHeight = 2 * depth * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+        const viewWidth = viewHeight * camera.aspect;
+        const maxWidth = viewWidth * (camera.aspect < 1 ? 0.72 : 0.37);
+        if (item.sprite.scale.x > maxWidth) item.sprite.scale.multiplyScalar(maxWidth / item.sprite.scale.x);
+        const halfWidth = item.sprite.scale.x / viewWidth;
+        const halfHeight = item.sprite.scale.y / viewHeight;
+        worldPoint.project(camera);
+        worldPoint.x = THREE.MathUtils.clamp(worldPoint.x, -0.94 + halfWidth, 0.94 - halfWidth);
+        const side = index === 0 ? -1 : 1;
+        worldPoint.y = side * THREE.MathUtils.clamp(Math.abs(worldPoint.y), ballRadiusY + halfHeight + 0.06, 0.93 - halfHeight);
+        labelExclusions[index + 1].set(worldPoint.x - halfWidth, worldPoint.y - halfHeight, worldPoint.x + halfWidth, worldPoint.y + halfHeight);
+        worldPoint.unproject(camera);
+        item.sprite.position.copy(model!.worldToLocal(worldPoint));
       });
 
-      const ambientField = nodeSpaceAnimationsRef.current.field;
-      if (ambientField) {
-        ambientField.rotation.y = time * 0.008;
-        ambientField.rotation.x = Math.sin(time * 0.09) * 0.035;
-        (ambientField.material as THREE.PointsMaterial).opacity =
-          0.24 + Math.sin(time * 0.18) * 0.045;
-      }
+      nodeSpaceAnimationsRef.current.field?.update(time, camera, renderer.domElement.height, renderer.getPixelRatio(), labelExclusions);
 
       if (model?.userData.isNodeSpace) {
         model.updateMatrixWorld(true);
@@ -1349,6 +1590,7 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
     // クリーンアップ
     return () => {
       window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       if (sceneRef.current) {
         cancelAnimationFrame(sceneRef.current.animationId);
         if (ENABLE_MODEL_INTERACTION) {
@@ -1383,7 +1625,7 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
       disposeObject3D(sceneRef.current.model);
       sceneRef.current.model = null;
     }
-    nodeSpaceAnimationsRef.current = { field: null, nodes: [], path: null, sprites: [] };
+    nodeSpaceAnimationsRef.current = { cues: [], field: null, nodes: [], path: null, sprites: [] };
 
     // まばたきメッシュ・腕ボーン参照をリセット
     blinkMeshesRef.current = [];
@@ -1488,7 +1730,7 @@ export function ModelViewer({ modelUrl, softwareLogoUrl, w3LogoUrl }: ModelViewe
 
         // 初期回転を適用（デザインに合わせた傾き）
         object.rotation.x = -0.04;
-        object.rotation.y = 0.02;
+        object.rotation.y = isEightBall ? 0.3 : 0.02;
         object.rotation.z = 0;
 
         if (isEightBall) {

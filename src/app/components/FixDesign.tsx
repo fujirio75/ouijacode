@@ -14,7 +14,6 @@ export function FixDesign() {
         softwareLogoUrl={SOFTWARE_LOGO}
         w3LogoUrl={W3_LOGO}
       />
-      <div className="node-space-vignette pointer-events-none absolute inset-0" />
     </main>
   );
 }
