@@ -8,6 +8,7 @@ const DEFAULT_MODEL = assetPath(`models/${import.meta.env.VITE_MODEL_FILE ?? 'ei
 const BLOG_URL = import.meta.env.VITE_BLOG_URL ?? '';
 const GITHUB_URL = import.meta.env.VITE_GITHUB_URL ?? 'https://github.com/fujirio75';
 const VRCHAT_URL = import.meta.env.VITE_VRCHAT_URL ?? '';
+const MARQUEE_TEXT = 'w3 software is — ゲームソフトウェアプログラミングをおこなうエージェントのWebサイトです。リアルタイム3D、Unity、WebGL、VRChat、インタラクティブコンテンツを横断し、遊ぶ人の身体感覚と好奇心に触れる、新しいゲーム体験、実験的なソフトウェア、仮想空間、表現のための仕組みを考え、設計し、コードを書き、動かし、試しながら、まだ名前のない面白さを形にしています。企画、プロトタイピング、技術検証、実装、演出、運用まで、ゲームとソフトウェアの境界を行き来しながら、触れた瞬間に何かが始まるようなデジタル体験をつくります。';
 
 export function FixDesign() {
   const [isLinksOpen, setIsLinksOpen] = useState(false);
@@ -31,6 +32,13 @@ export function FixDesign() {
   return (
     <main className="node-space-root relative h-dvh min-h-screen w-full overflow-hidden bg-[#fbfbf9]">
       <ModelViewer modelUrl={DEFAULT_MODEL} onActivate={openLinks} />
+
+      <div aria-label={MARQUEE_TEXT} className="node-space-marquee">
+        <div aria-hidden="true" className="node-space-marquee-track">
+          <span className="node-space-marquee-copy">{MARQUEE_TEXT}</span>
+          <span className="node-space-marquee-copy">{MARQUEE_TEXT}</span>
+        </div>
+      </div>
 
       {isLinksOpen && (
         <div

@@ -205,3 +205,53 @@
 .node-space-root canvas:active {
   cursor: grabbing;
 }
+
+.node-space-marquee {
+  color: rgb(15 15 15 / 62%);
+  font-size: 0.68rem;
+  font-weight: 500;
+  left: 0;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  mask-image: linear-gradient(to right, transparent, #000 3%, #000 97%, transparent);
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: max(1rem, env(safe-area-inset-top));
+  white-space: nowrap;
+  z-index: 10;
+}
+
+.node-space-marquee-track {
+  animation: node-space-marquee 110s linear infinite;
+  display: flex;
+  width: max-content;
+  will-change: transform;
+}
+
+.node-space-marquee-copy {
+  flex: none;
+  padding-right: 8rem;
+}
+
+@keyframes node-space-marquee {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (max-width: 640px) {
+  .node-space-marquee {
+    font-size: 0.62rem;
+    top: max(0.8rem, env(safe-area-inset-top));
+  }
+
+  .node-space-marquee-track {
+    animation-duration: 95s;
+  }
+}
