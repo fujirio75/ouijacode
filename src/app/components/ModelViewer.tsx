@@ -1104,7 +1104,7 @@ function addEightBallNodeSpace(root: THREE.Group, ball: THREE.Group): NodeSpaceA
       baseScale: ball.scale.clone(),
       currentGaze: new THREE.Vector2(),
       group: ball,
-      nextSaccadeAt: 1.1,
+      nextSaccadeAt: 0.65,
       random: seededRandom(19303),
       targetGaze: new THREE.Vector2()
     },
@@ -1414,14 +1414,14 @@ export function ModelViewer({ modelUrl, onActivate }: ModelViewerProps) {
             (ball.random() - 0.5) * 0.38,
             horizontalDirection * (0.32 + ball.random() * 0.34)
           );
-          ball.nextSaccadeAt = time + 1.8 + ball.random() * 3.4;
+          ball.nextSaccadeAt = time + 0.7 + ball.random() * 1.4;
         }
 
-        const saccadeCatchUp = 1 - Math.exp(-deltaTime * 20);
+        const saccadeCatchUp = 1 - Math.exp(-deltaTime * 38);
         ball.currentGaze.lerp(ball.targetGaze, saccadeCatchUp);
-        const microPitch = Math.sin(time * 10.7) * 0.009 + Math.sin(time * 17.9 + 0.8) * 0.005;
-        const microYaw = Math.sin(time * 8.9 + 1.3) * 0.012 + Math.sin(time * 14.3) * 0.006;
-        const microRoll = Math.sin(time * 11.8 + 2.1) * 0.006;
+        const microPitch = Math.sin(time * 16.5) * 0.009 + Math.sin(time * 27.2 + 0.8) * 0.005;
+        const microYaw = Math.sin(time * 14.6 + 1.3) * 0.012 + Math.sin(time * 22.8) * 0.006;
+        const microRoll = Math.sin(time * 18.4 + 2.1) * 0.006;
         ballEuler.set(
           ball.currentGaze.x + microPitch,
           ball.currentGaze.y + microYaw,
