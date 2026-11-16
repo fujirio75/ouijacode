@@ -744,9 +744,11 @@ async function createAccentSvgSprite(url: string, height: number) {
 }
 
 function tuneEightBallMaterial(mesh: THREE.Mesh) {
-  if (/Eight_Ball_Phenolic_Resin/i.test(mesh.name)) {
+  const isBallSurface = /Eight_Ball_Phenolic_Resin/i.test(mesh.name);
+
+  if (isBallSurface) {
     const originalGeometry = mesh.geometry;
-    mesh.geometry = new THREE.SphereGeometry(1, 96, 64);
+    mesh.geometry = new THREE.IcosahedronGeometry(1, 3);
     mesh.geometry.computeVertexNormals();
     originalGeometry.dispose();
   }
@@ -754,24 +756,25 @@ function tuneEightBallMaterial(mesh: THREE.Mesh) {
   const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
   materials.forEach((material) => {
     if (material instanceof THREE.MeshStandardMaterial) {
-      if (/polished phenolic resin\s*-\s*black/i.test(material.name)) {
+      if (isBallSurface || /polished phenolic resin\s*-\s*black/i.test(material.name)) {
         material.color.set(BALL_RED);
       }
 
       material.emissive.set(0x000000);
       material.emissiveIntensity = 0;
       material.envMapIntensity = 0;
-      material.flatShading = false;
+      material.flatShading = isBallSurface;
       material.metalness = 0;
       material.normalMap = null;
-      material.roughness = 1;
+      material.roughness = isBallSurface ? 0.76 : 1;
 
       if (material instanceof THREE.MeshPhysicalMaterial) {
-        material.clearcoat = 0;
-        material.clearcoatRoughness = 1;
+        material.clearcoat = isBallSurface ? 0.06 : 0;
+        material.clearcoatRoughness = isBallSurface ? 0.82 : 1;
         material.iridescence = 0;
         material.sheen = 0;
-        material.specularIntensity = 0;
+        material.specularColor.set(0xffffff);
+        material.specularIntensity = isBallSurface ? 0.48 : 0;
       }
 
       material.needsUpdate = true;
